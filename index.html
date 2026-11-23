@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>街角记忆 · 一条街的生态全景</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<!-- booting：语义上属于"开场期间"，但第一屏 #loader 本身就是 fixed 全屏、
+     已把街道页完全盖住，所以 app.js 在初始化时**立刻**摘掉这个类（不再等点击）。
+     留着它只会带来一个风险：一旦第一屏的淡出被中断，HUD 与底部副标题会永久停在 opacity:0。 -->
+<div class="app booting">
+<!-- 悬浮 HUD（替代原导航栏：左工具 / 中品牌 / 右进度） -->
+<div class="hud">
+  <div class="hud-left">
+    <!-- 左上角两个「符号钮」：只留图形、不写字（半透明磨砂圆钮，与整体暗金/牛皮纸语言统一）。
+         音乐：手写音符；重走：回环箭头（重走这条街）。
+         两枚都是内联 SVG，不用 emoji，保证任何系统下长相一致。 -->
+    <button class="hud-icon-btn music-btn" id="musicBtn" aria-label="背景音乐开关" aria-pressed="false" title="背景音乐">
+      <span class="music-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18V5.5l10-2v12"></path>
+          <circle cx="6.6" cy="18" r="2.7"></circle>
+          <circle cx="16.6" cy="15.5" r="2.7"></circle>
+        </svg>
+      </span>
+    </button>
+    <button class="hud-icon-btn" id="resetBtn" aria-label="重走这条街" title="重走这条街">
+      <span class="hud-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.5 14.5a8.8 8.8 0 1 1-2.1-9.3"></path>
+          <path d="M21.5 3.2v5.6h-5.6"></path>
+        </svg>
+      </span>
+    </button>
+  </div>
+  <div class="hud-brand" aria-hidden="true">街 角 记 忆</div>
+  <div class="hud-right">
+    <span class="hud-badge">
+      <i class="hud-mono">街</i>
+      <b class="progress-count" id="progressCount">0/6</b>
+      <span class="hud-track"><i class="progress-fill" id="progressFill"></i></span>
+    </span>
+  </div>
+</div>
+
+<!-- 街景舞台 -->
+<div class="stage-wrap" id="stageWrap">
+  <!-- 完整背景（代码绘制的青岛小村庄长街，等价于一张背景图） -->
+  <div class="bg-layer" id="bgLayer"></div>
+
+  <!-- 树叶符号库：梧桐掌状裂叶（底色 + 淡叶脉，不描边——硬描边是「贴纸感」的来源） -->
+  <svg class="leaf-defs" aria-hidden="true">
+    <defs>
+      <linearGradient id="lgA" x1=".2" y1="0" x2=".8" y2="1">
+        <stop offset="0" stop-color="#b9b062"/><stop offset="1" stop-color="#d8a848"/>
+      </linearGradient>
+      <linearGradient id="lgB" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#c9a84e"/><stop offset="1" stop-color="#c88a3c"/>
+      </linearGradient>
+      <linearGradient id="lgC" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#d39a44"/><stop offset="1" stop-color="#a8613a"/>
+      </linearGradient>
+      <!-- 三裂尖头叶 -->
+      <symbol id="leaf-a" viewBox="0 0 40 40">
+        <path d="M20 37 L19 22 L9 15 L14 13 L19 17 L19 6 L22 17 L27 12 L32 15 L22 22 L21 37 Z" fill="url(#lgA)"/>
+        <path d="M20 36 V19 M20 21 L12 15 M20 21 L29 15" stroke="#8d7a3c" stroke-opacity=".5" stroke-width=".9" fill="none" stroke-linecap="round"/>
+      </symbol>
+      <!-- 五裂宽叶 -->
+      <symbol id="leaf-b" viewBox="0 0 40 40">
+        <path d="M20 38 L18.5 22 L6 15 L11 11 L17.5 15.5 L16 6 L20 3.5 L24 6 L22.5 15.5 L29 11 L34 15 L21.5 22 L21 38 Z" fill="url(#lgB)"/>
+        <path d="M20 36 V18 M20 20 L11 14 M20 20 L29 14 M20 12 L16.5 7.5 M20 12 L23.5 7.5" stroke="#8d7a3c" stroke-opacity=".5" stroke-width=".9" fill="none" stroke-linecap="round"/>
+      </symbol>
+      <!-- 三裂小叶（偏圆） -->
+      <symbol id="leaf-c" viewBox="0 0 40 40">
+        <path d="M20 37 L18.5 22 L8.5 14.5 L13.5 11 L18.5 15.5 L18 6 L22 6 L21.5 15.5 L26.5 11 L31.5 14.5 L21.5 22 L21 37 Z" fill="url(#lgC)"/>
+        <path d="M20 36 V19 M20 21 L12 14.5 M20 21 L28 14.5" stroke="#8d7a3c" stroke-opacity=".5" stroke-width=".9" fill="none" stroke-linecap="round"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <!-- 树冠上的梧桐叶：由 app.js 挂进 .bg-layer（自动继承视差），坐标由 layout() 按背景图百分比换算 -->
+  <div class="leaf-container" id="leafContainer" aria-hidden="true">
+    <div class="leaf-sway"><svg class="leaf-art"><use href="#leaf-a"/></svg></div>
+    <div class="leaf-sway"><svg class="leaf-art"><use href="#leaf-b"/></svg></div>
+    <div class="leaf-sway"><svg class="leaf-art"><use href="#leaf-c"/></svg></div>
+    <div class="leaf-sway"><svg class="leaf-art"><use href="#leaf-a"/></svg></div>
+    <div class="leaf-sway"><svg class="leaf-art"><use href="#leaf-b"/></svg></div>
+    <div class="leaf-sway"><svg class="leaf-art"><use href="#leaf-c"/></svg></div>
+    <div class="leaf-sway"><svg class="leaf-art"><use href="#leaf-a"/></svg></div>
+    <div class="leaf-sway"><svg class="leaf-art"><use href="#leaf-b"/></svg></div>
+    <div class="leaf-sway"><svg class="leaf-art"><use href="#leaf-c"/></svg></div>
+    <div class="leaf-sway"><svg class="leaf-art"><use href="#leaf-a"/></svg></div>
+  </div>
+
+  <!-- 角色互动层：热区插这里 -->
+  <div class="hit-layer" id="hitLayer"></div>
+
+  <!-- 幕次标记 -->
+  <div class="act-label" id="actLabel"></div>
+  <!-- 关系网提示条 -->
+  <div class="relation-note" id="relationNote"></div>
+  <!-- 滚动导轨 -->
+  <div class="scroll-rail"><i class="scroll-thumb" id="railThumb"></i></div>
+  <!-- 舞台提示条：深棕半透明 + 暖白字 + 暗金细线；
+       贴底，避开六家店铺与人物（2026-10 晚起底部不再有副标题） -->
+  <div class="stage-hint" id="stageHint">
+    <span class="hint-dot"></span>
+    <span id="stageHintText">点点街上那些<b>微微发光</b>的地方，店主会走出来跟你说句话</span>
+  </div>
+</div>
+</div>
+
+
+<!-- 结局全景 -->
+<div class="finale" id="finale">
+  <div class="finale-bg" aria-hidden="true"></div>
+  <h2 class="finale-title">街 道 生 态 全 景</h2>
+  <div class="turntable-container" id="turntableContainer">
+    <div class="turntable" id="turntable"></div>
+    <button class="arrow-btn prev" id="prevBtn" aria-label="上一位街坊">◀</button>
+    <button class="arrow-btn next" id="nextBtn" aria-label="下一位街坊">▶</button>
+  </div>
+  <p class="finale-hint" id="finaleHint"><span class="hint-dot"></span><b>点击左右箭头或 ← → 键切换 · 点一下头像</b>，听听他们这一路的故事</p>
+
+  <!-- 结局页动作：只保留「回看街道」，移到右下角与「关于」上下排列（见 CSS） -->
+  <div class="finale-actions">
+    <button class="btn" id="againBtn">回看街道</button>
+  </div>
+
+  <!-- 点击头像展开的人物故事（藤蔓缠绕的羊皮纸档案卡） -->
+  <div class="story-panel" id="storyPanel" role="dialog" aria-modal="true" aria-labelledby="storyTitle">
+    <!-- 背景藤蔓：从卡片后面生长出来 -->
+    <svg class="vine vine-back" viewBox="0 0 300 300" aria-hidden="true">
+      <path d="M 10,290 Q 50,200 150,180 T 290,10" fill="none" stroke="#5c6e3a" stroke-width="4" stroke-linecap="round"/>
+      <path d="M 50,240 Q 80,220 90,250 Q 60,260 50,240 Z" fill="#6b8e23"/>
+      <path d="M 110,200 Q 140,170 150,200 Q 120,220 110,200 Z" fill="#6b8e23"/>
+      <path d="M 200,120 Q 230,90 240,120 Q 210,140 200,120 Z" fill="#6b8e23"/>
+    </svg>
+    <article class="story-card">
+      <button class="story-close" aria-label="关闭">×</button>
+      <!-- 左侧：文字（姓名 / 副题 / 引言 / 正文 / 尾句） -->
+      <div class="story-main">
+        <header class="story-head">
+          <h3 id="storyTitle"></h3>
+          <p class="story-sub" id="storySub"></p>
+        </header>
+        <div class="story-body" id="storyBody"></div>
+      </div>
+      <!-- 右侧：人物大大的立绘，站在卡面上（由 app.js 写入 <img>） -->
+      <div class="story-figure" id="storyFigure" aria-hidden="true"></div>
+    </article>
+    <!-- 前景藤蔓：压在卡片边角，制造缠绕感 -->
+    <svg class="vine vine-front" viewBox="0 0 200 200" aria-hidden="true">
+      <path d="M 0,0 Q 50,50 100,30 T 200,80" fill="none" stroke="#7a8f46" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 40,30 Q 60,10 70,30 Q 50,50 40,30 Z" fill="#8da855"/>
+      <path d="M 120,40 Q 140,20 150,40 Q 130,60 120,40 Z" fill="#8da855"/>
+      <circle cx="90" cy="30" r="4" fill="#a4c263"/>
+    </svg>
+    <!-- 左右箭头：在故事卡里直接翻到下一位街坊，不必退出到全景页 -->
+    <button class="story-nav prev" id="storyPrev" type="button" aria-label="上一位街坊">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <button class="story-nav next" id="storyNext" type="button" aria-label="下一位街坊">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- 第一屏：一屏三拍（星尘聚字 → 字定格 → 文案与按钮浮现），全部在同一屏完成。
+     原第二幕 .intro 卡片已删除——它的文案与按钮被搬到这里。
+     排版铁律：上中下三段互不重叠
+       38% 题献（粒子聚成的唯一主角，其下跟着一行英文小字） / 54% 金线 / 62% 起 大标题·说明·按钮
+     底部只留一行提示；原「正在生成黄昏市井」那条已删（与底部提示重复，且把视线从题献上拽走）。
+     ★ 题献文字改动时必须同步改 js/loader-fx.js 里的 TITLE 常量，粒子才会聚成同一个词。 -->
+<div class="loader" id="loader" role="dialog" aria-modal="true" aria-labelledby="loaderTitle">
+  <!-- 暗版底：整场粒子戏都压在它上面 -->
+  <div class="loader-bg" id="loaderBg" aria-hidden="true"></div>
+  <!-- 亮版底：★ 初始几乎全黑，只有用户点击后（.entering）才对焦 -->
+  <div class="loader-bg-top" id="loaderBgTop" aria-hidden="true"></div>
+  <canvas class="loader-fx" id="loaderFx" aria-hidden="true"></canvas>
+
+  <!-- 题献：宽屏由粒子聚成，窄屏 / 无动画时由 JS 加 .as-text 直接显示 -->
+  <p class="loader-dedicate" id="loaderDedicate">记忆里的那条街</p>
+  <!-- 题献的英文小字：与中文同一节奏淡入（loader-fx.js 逐帧写透明度） -->
+  <p class="loader-dedicate-en" id="loaderDedicateEn">MEMORIES OF AN OLD STREET</p>
+
+  <!-- 文案块：只在下半屏，绝不与题献重叠 -->
+  <div class="loader-copy" id="loaderCopy">
+    <div class="loader-rule" aria-hidden="true"></div>
+    <h1 class="loader-title" id="loaderTitle">街 角 记 忆</h1>
+    <p class="loader-tip">一条老街，六个熟悉的身影。<br>他们有各自的脾气、性格与生活方式，也在日复一日的平凡生活里，留下属于这条街的温度。<br>我想重新走进记忆里的街巷，记录那些平凡却一直值得记住的人。</p>
+    <button class="loader-enter" id="loaderEnter">走进这条街<svg class="enter-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15"></path><path d="M13 6l6 6-6 6"></path></svg></button>
+  </div>
+
+  <!-- 首页巡街的小黑猫：黄昏绘本风格精细 SVG 角色（2.0 造型），
+       体态修长流畅、杏眼小巧、头身比和谐；走位/停顿/坐下/舔爪
+       由 js/loader-cat.js 随机编排。pointer-events:none ——
+       它只是氛围，不参与任何交互，也不会挡住按钮。 -->
+  <div class="loader-cat" id="loaderCat" aria-hidden="true">
+    <svg class="cat-rig" viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <!-- 温暖的黑棕毛色：受光面偏暖棕，暗面沉而不死黑 -->
+        <linearGradient id="streetCatFur" x1=".2" y1="0" x2=".75" y2="1">
+          <stop offset="0" stop-color="#453b32"/>
+          <stop offset=".5" stop-color="#29221d"/>
+          <stop offset="1" stop-color="#181411"/>
+        </linearGradient>
+        <linearGradient id="streetCatFace" x1=".1" y1="0" x2=".9" y2="1">
+          <stop offset="0" stop-color="#40362d"/>
+          <stop offset="1" stop-color="#1b1714"/>
+        </linearGradient>
+        <linearGradient id="streetCatEye" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#e8bd6f"/>
+          <stop offset="1" stop-color="#b97e2e"/>
+        </linearGradient>
+        <linearGradient id="streetCatRim" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#8a7460" stop-opacity=".42"/>
+          <stop offset="1" stop-color="#8a7460" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+
+      <!-- 石板路上的一小片柔影 -->
+      <ellipse class="cat-shadow" cx="97" cy="108" rx="56" ry="4.5"/>
+
+      <!-- 尾巴：三段收细的柔弧，末端轻轻上翘，摆动绕根部 -->
+      <g class="cat-tail">
+        <path d="M46 84 C34 86 25 79 23 68" fill="none" stroke="#1e1916" stroke-width="11" stroke-linecap="round"/>
+        <path d="M23 68 C21.5 60 25 52 32 48" fill="none" stroke="#221c18" stroke-width="8.6" stroke-linecap="round"/>
+        <path d="M32 48 C36 45.5 41 44.8 45 46.5" fill="none" stroke="#26201b" stroke-width="6.4" stroke-linecap="round"/>
+        <path d="M25 66 C24.5 60 27 54 32 50.5" fill="none" stroke="#5d4c3d" stroke-width="1.6" stroke-linecap="round" opacity=".5"/>
+      </g>
+
+      <!-- 远侧腿：更暗一档，藏在身后 -->
+      <g class="leg leg-back-a">
+        <path d="M58 86 C54 94 53 100 54.5 105" fill="none" stroke="#171310" stroke-width="9" stroke-linecap="round"/>
+        <path d="M50.5 105.5 Q54.5 107.6 58.5 105.5" fill="none" stroke="#171310" stroke-width="5.4" stroke-linecap="round"/>
+      </g>
+      <g class="leg leg-front-a">
+        <path d="M126 84 C129 92 129.5 99 128 105" fill="none" stroke="#171310" stroke-width="9" stroke-linecap="round"/>
+        <path d="M124.5 105.5 Q128.5 107.6 132.5 105.5" fill="none" stroke="#171310" stroke-width="5.4" stroke-linecap="round"/>
+      </g>
+
+      <g class="cat-main">
+        <!-- 躯干：流畅背线，臀部微微隆起，整条曲线一气呵成 -->
+        <path d="M42 100 C36 88 40 71 55 64 C74 55.5 104 53.5 124 60 C141 65.5 151 76 153 89 C154 96 150.5 101 144 102 C118 107 62 106.5 42 100 Z" fill="url(#streetCatFur)"/>
+        <ellipse cx="63" cy="82" rx="17" ry="15" fill="url(#streetCatFur)"/>
+        <!-- 背部受光边缘 -->
+        <path d="M50 84 C54 70 68 62 92 60 C112 58.5 130 63 141 72" fill="none" stroke="url(#streetCatRim)" stroke-width="2.6" stroke-linecap="round"/>
+        <!-- 腹部一丝反光 + 几笔细毛 -->
+        <path d="M60 100 C86 105 128 104 148 96 C146 100 140 102.5 132 103 L68 103 C62 103 58 102 60 100 Z" fill="#4c4034" opacity=".2"/>
+        <path d="M88 64 l5 -2.4 M100 62.6 l5 -2.2 M112 63 l5 -1.8" stroke="#6e5b49" stroke-width="1" stroke-linecap="round" opacity=".3" fill="none"/>
+
+        <g class="cat-head">
+          <!-- 头：小巧的圆楔形，吻部略收，头身比和谐 -->
+          <path d="M136 63 C132.5 54 135 44 144 39.5 C152 35.5 163 35 170 40 C176.5 44.5 179.5 52 177.5 60 C175.5 69 167.5 74.5 157.5 74.5 C148 74.5 139.5 70.5 136 63 Z" fill="url(#streetCatFace)"/>
+          <path d="M141 45 C144 40.5 149 38 155 37.3" fill="none" stroke="url(#streetCatRim)" stroke-width="2" stroke-linecap="round"/>
+          <!-- 耳朵：小而灵巧，微微外倾 -->
+          <g class="cat-ear cat-ear-left">
+            <path d="M143 42 C140 34.5 141.5 27.5 146.5 26.5 C151 25.6 154.5 30.5 156 37.5 C152 37.5 147 39.5 143 42 Z" fill="#241e19"/>
+            <path d="M145 39.5 C143.5 34.5 144.3 30.5 147 30 C149.3 29.6 151.3 32.6 152.3 36.6 C149.6 36.9 147 38 145 39.5 Z" fill="#6e5347" opacity=".5"/>
+          </g>
+          <g class="cat-ear cat-ear-right">
+            <path d="M162 36.5 C162.6 29 166 23.5 170.5 24.5 C174.6 25.4 176.3 31 175 37.8 C171 35.9 166.4 35.5 162 36.5 Z" fill="#241e19"/>
+            <path d="M164.6 34.8 C165.4 30 167.3 26.9 169.7 27.4 C171.9 27.9 172.9 31 172.4 34.9 C169.8 33.9 167.1 33.9 164.6 34.8 Z" fill="#6e5347" opacity=".5"/>
+          </g>
+          <!-- 吻部：只留一点结构感，不做突出的嘴包 -->
+          <path d="M176 60 C179.5 60.5 181.5 62.5 181 65 C180.5 67.3 178 68.6 175 68.2" fill="none" stroke="#3a312a" stroke-width="2.2" stroke-linecap="round" opacity=".8"/>
+          <path d="M181.6 62.2 l2.6 1.5 -2.6 1.6 Z" fill="#7d554a"/>
+          <path d="M181 66.4 C179.8 68.2 177.9 68.9 176 68.5" fill="none" stroke="#4a3c33" stroke-width="1" stroke-linecap="round" opacity=".7"/>
+          <!-- 眼睛：细长杏眼，上眼线微微挑起，恬静不呆萌 -->
+          <g class="cat-eye-near">
+            <path d="M158.5 53.5 C160.5 51.2 164.5 51 166.8 53" fill="none" stroke="#120e0b" stroke-width="1.6" stroke-linecap="round"/>
+            <ellipse cx="162.8" cy="54.8" rx="3.5" ry="3.2" fill="url(#streetCatEye)"/>
+            <ellipse cx="163.2" cy="54.9" rx="1" ry="2.2" fill="#161009"/>
+            <circle cx="161.9" cy="53.6" r=".8" fill="#f6ead2" opacity=".85"/>
+            <ellipse class="cat-lid" cx="162.8" cy="54.6" rx="4" ry="3.8" fill="#221c17"/>
+          </g>
+          <g class="cat-eye-far">
+            <path d="M175.5 51.5 C177 49.8 179.8 49.7 181.4 51.2" fill="none" stroke="#120e0b" stroke-width="1.2" stroke-linecap="round"/>
+            <ellipse cx="178.6" cy="52.6" rx="2.5" ry="2.4" fill="url(#streetCatEye)"/>
+            <ellipse cx="178.9" cy="52.7" rx=".75" ry="1.6" fill="#161009"/>
+          </g>
+          <!-- 胡须：轻若发丝 -->
+          <path d="M181 62.5 l7.5 -2 M181 65.5 l7.5 1.4 M158 64 l-6.5 -1 M158 66.5 l-6 1.6" stroke="#a6957f" stroke-width=".7" stroke-linecap="round" opacity=".38" fill="none"/>
+          <!-- 舔爪时才出现的小舌头 -->
+          <path class="cat-tongue" d="M174 70 C177.5 71.6 179.3 74.2 178.6 77.2 C175.8 77.6 172.9 75.2 171.9 72 Z" fill="#c9737a"/>
+        </g>
+      </g>
+
+      <!-- 近侧腿：比远侧亮一档，细而不弱 -->
+      <g class="leg leg-back-b">
+        <path d="M70 88 C66 95 65 100 66.5 104.5" fill="none" stroke="#2b2420" stroke-width="10" stroke-linecap="round"/>
+        <path d="M62.5 105 Q66.5 107.2 70.5 105" fill="none" stroke="#2b2420" stroke-width="6.4" stroke-linecap="round"/>
+        <path d="M66.5 92 C65 97 64.6 100 65.4 102.5" fill="none" stroke="#5b4b3c" stroke-width="1.3" stroke-linecap="round" opacity=".4"/>
+      </g>
+      <g class="leg leg-front-b">
+        <path d="M138 86 C141.5 93 142 99 140.5 104.5" fill="none" stroke="#2b2420" stroke-width="10" stroke-linecap="round"/>
+        <path d="M136.5 105 Q140.5 107.2 144.5 105" fill="none" stroke="#2b2420" stroke-width="6.4" stroke-linecap="round"/>
+        <path d="M141.5 91 C142.6 95.5 142.8 98.5 142 101.5" fill="none" stroke="#5b4b3c" stroke-width="1.3" stroke-linecap="round" opacity=".4"/>
+      </g>
+    </svg>
+  </div>
+
+
+
+</div>
+
+<!-- 确认对话框（替代浏览器原生 confirm，风格与全站统一） -->
+<div class="dlg-mask" id="dlgMask" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+  <div class="dlg">
+    <h3 class="dlg-title" id="dlgTitle"></h3>
+    <p class="dlg-text" id="dlgText"></p>
+    <div class="dlg-actions">
+      <button class="btn" id="dlgCancel">再想想</button>
+      <button class="btn primary" id="dlgOk">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 右下角：关于作品 -->
+<button class="about-btn" id="aboutBtn" aria-label="关于作品">关 于</button>
+<div class="about-panel" id="aboutPanel" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+  <article class="about-card">
+    <button class="about-close" aria-label="关闭">×</button>
+    <header>
+      <h3 id="aboutTitle">街上有光</h3>
+      <p class="about-sub">作 品 简 介 · About</p>
+    </header>
+    <div class="about-body">
+      <p>每个人的记忆里，或许都有这样一条街。它不一定繁华，也没有什么特别的地方，却因为一些人的存在，成为记忆中难以替代的地方。对我而言，这条街与母亲生活了几十年的地方紧紧相连。直到今天，母亲依然生活在那里，那条街也依旧存在。</p>
+      <p>当我决定创作这个作品时，脑海中浮现的不是宏大的场景，而是街上的那些人。他们是我身边亲近的人，也是每当我想起这条街，就会自然而然想起的人。他们有的咋咋呼呼、热情豪爽，有的真诚朴实、待人热忱，有的忠于自己的生活，也始终保持着对日子的热爱。他们都是普通人，经营着自己的小店，过着平凡的生活，却在不知不觉中，成为我记忆里不可缺少的一部分。</p>
+      <p>于是，我将这六位真实存在于生活中的人物汇聚到同一条街上，以修鞋铺、木工坊、理发店、串串店、中医推拿馆和水果店为载体，通过人物登场与对话互动，让他们重新出现在这条熟悉的街道里。我希望观众不仅能看到这些店铺，也能通过他们看见那些藏在日常生活中的性格、善意与温暖。</p>
+      <p>我想记录这条街，<strong class="about-key">并不是因为它即将消失，也不是因为它有什么与众不同，而是因为它曾经陪伴我、帮助我，在我的成长中给予过我温暖的怀抱。</strong>它承载着我的童年记忆，也留存着许多人与人之间真切的情感。</p>
+      <p>我想，每个人的生活里都可能有这样一条街。那里有熟悉的面孔，有叫得出名字的小店，也有一些平时不会特意提起，却总能在想起某段往事时浮现在脑海中的人。</p>
+      <p>我希望有一天，当有人看到这个作品，恰好也走过这样一条街时，会想起自己记忆中的那些人。也许他会想起一位常去的店主，想起一声熟悉的招呼，或者想起一段早已习以为常、却从未认真珍惜过的日常。</p>
+      <p>母亲依然在那里，这条街也依然在那里。如果未来的某一天，你来到这条街，想起了我的作品，不妨试着寻找我记录的这些人物，看看他们真实的模样。你会发现，屏幕里的故事并不是凭空想象的，而是来自真实生活，而生活仍在继续。</p>
+      <p class="about-tail">《街上有光》，记录的不只是一条街，更是那些因为彼此的存在，而让这条街变得温暖的人。</p>
+    </div>
+  </article>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- 点击空处泛起的光斑：JS 全程复用这一个节点，绝不反复创建 DOM。 -->
+<div class="tap-glow" id="tapGlow" aria-hidden="true"></div>
+
+<!-- 背景音乐：整条街的底噪（ xylophone + 街道车流），循环播放。
+     初始音量 12%（与作者播放器当时的音量一致），存 localStorage 记忆用户后续调节。
+     ★ 浏览器策略：没有用户交互前不允许出声，所以真正的 play() 挂在开场点击之后；
+       preload="auto" 只预载不播放，autoplay 属性刻意不加。 -->
+<audio id="bgm" src="assets/audio/bg-street.mp3" preload="auto" loop></audio>
+
+<script src="js/loader-fx.js"></script>
+<script src="js/loader-cat.js"></script>
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

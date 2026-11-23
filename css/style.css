@@ -1,0 +1,3349 @@
+/* =========================================================
+   街角记忆 · 视觉系统
+   配色：深棕底 + 牛皮纸 + 墨色 + 老式招牌红 + 暖黄灯光
+   场景：青岛市市北区小村庄，90年代，没有围墙的小区
+   ========================================================= */
+
+:root {
+  /* 底与纸 */
+  --bg:        #2c2016;        /* 深棕底 */
+  --bg-dark:   #1a120d;
+  --bar:       #1f1610;        /* 顶栏 */
+  --bar-line:  #4a3829;
+  --panel:     #2a1f18;
+  --panel-2:   #3a2c22;
+  --panel-3:   #5a4636;
+
+  --paper:     #f4ecd8;        /* 牛皮纸 */
+  --paper-2:   #efe6d8;
+  --paper-3:   #d4c5b0;
+  --dim:       #8c7765;
+
+  /* 墨 */
+  --ink:       #3a2c22;
+  --ink-2:     #6b5545;
+
+  /* 主色 */
+  --red:       #8a3f34;        /* 老式招牌红 */
+  --red-2:     #a8442f;
+  --gold:      #c99b5f;        /* 暖黄灯光 */
+  --green:     #4a6b56;
+  --green-2:   #2f4a3f;
+
+  --shadow: 0 4px 18px rgba(0, 0, 0, .5);
+
+  --kai:  '霞鹜文楷', 'LXGW WenKai', 'KaiTi', 'STKaiti', '楷体', serif;
+  --song: 'Songti SC', 'SimSun', 'STSong', 'Noto Serif SC', serif;
+  --sans: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --mono: 'Courier New', Consolas, monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html {
+  height: 100%; width: 100%;
+  overflow: hidden;
+  position: fixed; inset: 0;
+}
+
+body {
+  height: 100%; width: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  overflow: hidden;
+  position: fixed; inset: 0;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* =========================================================
+   布局
+   ========================================================= */
+.app {
+  position: fixed; top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+
+/* 兜底态：万一 .booting 没被摘掉，街道页控件不会永久隐身。
+   理由：音乐 / 重走 / 0-6 进度都是"已经开始走这条街"之后才有意义的元素，
+   但第一屏 #loader 本身是 fixed 全屏、已把它们完全盖住，
+   所以 app.js 在初始化时就摘掉 .booting（不依赖点击），这条规则只作为防御保留。 */
+.app.booting .hud {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .55s ease .15s, visibility 0s .7s;
+}
+/* 反向保险：HTML 上没有 .booting 时控件必须可见（默认状态，别被别处的规则误伤） */
+.app:not(.booting) .hud {
+  opacity: 1;
+  visibility: visible;
+}
+.app .hud {
+  transition: opacity .55s ease, visibility 0s;
+}
+
+/* ---------- 顶栏 ---------- */
+.topbar {
+  flex: 0 0 auto;
+  height: 58px;
+  background: var(--bar);
+  border-bottom: 2px solid var(--bar-line);
+  display: flex; align-items: center;
+  padding: 0 20px; gap: 16px;
+  z-index: 50;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .45);
+}
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand h1 {
+  font-family: var(--kai);
+  font-size: 21px;
+  color: var(--paper);
+  letter-spacing: 3px;
+}
+.brand .sub { font-size: 11.5px; color: var(--dim); letter-spacing: .5px; }
+
+.spacer { flex: 1; }
+
+.progress-card {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--panel);
+  border: 1px solid var(--bar-line);
+  border-radius: 20px;
+  padding: 5px 15px 6px;
+}
+.progress-label { font-size: 11.5px; color: var(--dim); }
+.progress-count { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--gold); }
+.progress-track {
+  width: 66px; height: 6px;
+  background: var(--bar-line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-fill {
+  display: block; height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--gold), #e0b878);
+  transition: width .7s cubic-bezier(.22, 1, .36, 1);
+}
+
+.tools { display: flex; gap: 8px; }
+.btn {
+  background: var(--panel-2);
+  color: #d4c5b0;
+  border: 1px solid var(--panel-3);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-family: var(--kai);
+  font-size: 12px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: background .18s, color .18s;
+}
+.btn:hover { background: var(--panel-3); color: #fff; }
+.btn.primary { background: var(--gold); color: var(--ink); border: none; font-weight: 700; }
+.btn.off { color: var(--dim); background: var(--bar); }
+
+/* =========================================================
+   街景舞台
+   ========================================================= */
+.stage-wrap {
+  flex: 1 1 auto;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-dark);
+  cursor: grab;
+}
+.stage-wrap.dragging { cursor: grabbing; }
+
+/* 单张背景 */
+/* 背景层：必须撑满整个舞台，否则右/下会露底色 */
+.bg-layer {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  filter: sepia(.1) contrast(1.03) brightness(.97);
+}
+/* 窄屏（竖版手机）：cover 会把街道两侧的店铺裁掉，人物就无处安放。
+   改用「完整街道」模式 —— 背景图 contain 完整显示，左右用模糊放大版补满，
+   这样六位街坊在任何视口下都能站在自家店铺前。 */
+.stage-wrap.fit-all .bg-img {
+  object-fit: contain;
+  filter: none;
+}
+.stage-wrap.fit-all .bg-layer::before {
+  content: '';
+  position: absolute;
+  inset: -6%;
+  background-image: var(--bg-src);
+  background-size: cover;
+  background-position: center;
+  filter: blur(26px) saturate(.85) brightness(.62);
+  z-index: 0;
+}
+.stage-wrap.fit-all .bg-img { position: relative; z-index: 1; }
+/* 背景图：cover 铺满，不留空边 */
+.bg-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* 热区层 */
+.hit-layer {
+  position: absolute; top: 0; left: 0;
+  height: 100%;
+  z-index: 10;
+  will-change: transform;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+}
+.hit-layer .hotspot { pointer-events: auto; }
+
+/* =========================================================
+   角色热区 —— 藏 → 点击出现 → 永久停留
+   结构说明（重要）：
+     .hotspot  完整尺寸，专门负责「可点击」——不能用 clip-path 裁它，
+               否则命中区也跟着被裁掉，就难点中了
+     .char-vis  只负责「视觉裁剪」，人物从店里露出的多少由它控制
+   ========================================================= */
+.hotspot {
+  position: absolute;
+  transform: translate(-50%, 0);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+/* 外层：定位用，不裁剪 */
+.char-wrap {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* 内层：视觉裁剪层 —— 初始只露顶部一点点 */
+.char-vis {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  /* --hidden 控制遮住多少：88% = 只露顶部 12% */
+  clip-path: inset(0 0 var(--hidden, 88%) 0);
+  transition: clip-path .7s cubic-bezier(.22, 1, .36, 1),
+              opacity .5s, filter .5s;
+  opacity: .5;
+  filter: blur(1px) saturate(.5);
+}
+
+/* 点击后：完整出现，永久停留（不随鼠标移开而消失） */
+.hotspot.out .char-vis,
+.hotspot.lit .char-vis {
+  clip-path: inset(0 0 0 0);
+  opacity: 1;
+  filter: blur(0) saturate(1);
+  animation: fadeDevelop .7s cubic-bezier(.22, 1, .36, 1) both;
+}
+/* ★ 入场动画：像老照片逐渐显影（opacity + 微 blur + 6px 位移），
+   取代原来的 clip-path 下往上「长出来」（stepOut 剪影感偏硬）。
+   脚底位置不变，不产生漂浮 */
+@keyframes fadeDevelop {
+  0%   { opacity: 0;   filter: blur(3px) saturate(.35) brightness(.85);
+         transform: translateY(6px) scale(.985); }
+  60%  { opacity: .92; filter: blur(.6px) saturate(.85) brightness(1); }
+  100% { opacity: 1;   filter: blur(0) saturate(1); transform: none; }
+}
+
+/* 人物图：底部对齐 = 站在地面上 */
+.char-img {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: bottom center;
+  z-index: 4;                    /* 压过呼吸灯光晕（z:3）：光从人物身后透出来 */
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+/* =========================================================
+   呼吸灯（2026-10 定案：整条街只剩「那一圈暖光」这一处线索）
+   ---------------------------------------------------------
+   灯已从人物盒子里彻底搬出，成为 hit-layer 的直接子节点 .ping-zone
+   （见本文件末尾「呼吸灯 · 独立热区」），位置由 js/data.js 的 role.ping 指定，
+   与人物 / 门面同一套坐标系与同一套视差。
+   ★ 人物盒子上原来那个「脚下暖光」(.hotspot:not(.lit)::before) 已删除：
+     它和 .ping-zone 是两盏灯、位置还差着几厘米，同屏看着像重影，
+     也让人分不清该点哪一盏。现在「光 ＝ 唯一可点处」是干净的一对一。
+   ========================================================= */
+
+/* 呼吸灯涟漪：44px 起跳，扩到 1.45 倍就散掉（2 倍会变成一圈 88px 的大灯泡）
+   ★ 2026-10 晚：灯已从人物盒子里搬出，成为独立的 .ping-zone（见文件末尾）。
+     原来锁在人物脚下（left:50% / bottom:.5%），位置被立绘绑死、无法单独指定。
+     @keyframes pingRing 仍留在这里（新样式块直接引用它）。 */
+@keyframes pingRing {
+  0%   { opacity: .55; transform: scale(.5); }
+  70%  { opacity: .16; transform: scale(1.16); }
+  100% { opacity: 0;   transform: scale(1.45); }
+}
+
+.hotspot.lit { filter: drop-shadow(0 0 8px rgba(255, 205, 140, .3)); }
+
+/* 名字标签：点击出现后常驻。
+   ★ 只写人名（不再「店名 · 人名」）：招牌就在人物头顶，复述店名是重复信息；
+   字号与内边距也跟着收，让人物整体更小、更后退之后，标签比例仍然合适。 */
+.hotspot .tip {
+  position: absolute;
+  left: 50%; bottom: -2px;
+  transform: translate(-50%, 6px);
+  padding: 2px 9px 3px;
+  font-family: var(--kai);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  white-space: nowrap;
+  color: var(--paper);
+  background: rgba(43, 38, 34, .88);
+  border-radius: 3px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s, transform .3s;
+  z-index: 8;
+}
+.hotspot.lit .tip { opacity: 1; transform: translate(-50%, 0); }
+
+/* 台词气泡
+   注意：top 由 JS 的「气泡自动避让」算法逐帧计算写入内联样式，
+   所以这里不再用 bottom 锚定，避免两者打架。 */
+.speech-bubble {
+  position: absolute;
+  /* ★ left 带一个可选水平偏移 --bub-dx（由 layout() 按 role.bubDx 写入 px）：
+     默认 0，气泡仍以人物中心对齐；个别角色（王姐）需要单独往旁边挪开时，
+     只改 data.js 里的 bubDx，不必动通用定位逻辑。 */
+  left: calc(50% + var(--bub-dx, 0px));
+  bottom: auto;
+  top: -80px;   /* JS 会覆盖，仅作初始占位 */
+  transform: translate(-50%, 10px);
+  width: max-content;
+  max-width: 238px;
+  padding: 10px 14px 11px 17px;
+  /* 老招牌纸签风：纸面渐变，与全站牛皮纸同一套语言 */
+  background: linear-gradient(180deg, #f8f1de 0%, #f0e5cc 55%, #e6d7ba 100%);
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  border-radius: 8px;
+  font-family: var(--kai);
+  font-size: 13px;
+  line-height: 1.75;
+  white-space: normal;
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 40;
+  box-shadow:
+    inset 0 0 0 2.5px rgba(255, 252, 244, .72),   /* 内圈纸白描边 */
+    0 6px 20px rgba(0, 0, 0, .55);
+  transition: opacity .35s .1s, transform .35s .1s;
+}
+/* 开头的引号染招牌红，呼应故事卡引言框 */
+.speech-bubble::first-letter { color: var(--red); }
+/* 左侧红色竖签：和故事卡引言框同款 */
+.speech-bubble::before {
+  content: '';
+  position: absolute;
+  left: 7px; top: 9px; bottom: 9px;
+  width: 2.5px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--red-2), rgba(168, 68, 47, .35));
+}
+/* 指向人物的纸签小三角：墨色外三角 + 纸面内三角 */
+.speech-bubble::after {
+  content: '';
+  position: absolute; top: 100%; left: 50%;
+  transform: translateX(-50%);
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-top: 9px solid var(--ink);
+}
+/* 气泡：点击后常驻显示 */
+.hotspot.lit .speech-bubble { opacity: 1; transform: translate(-50%, 0); }
+
+/* 气泡锚点
+   ★ 统一规则：气泡始终【以人物水平中心对齐】（left:50% + translateX(-50%)），
+     垂直位置完全交给 JS 的自动避让算法。
+     早期版本用 bub-r/bub-l 把气泡偏向人物一侧，导致相邻角色的气泡
+     水平错位后反而互相交叠。现在方向只影响「贴边时不出界」的兜底钳制。 */
+.hotspot.bub-r .speech-bubble,
+.hotspot.bub-l .speech-bubble,
+.hotspot.bub-c .speech-bubble {
+  left: calc(50% + var(--bub-dx, 0px));
+  right: auto;
+  transform: translate(-50%, 10px);
+}
+.hotspot.bub-r.lit .speech-bubble,
+.hotspot.bub-l.lit .speech-bubble,
+.hotspot.bub-c.lit .speech-bubble {
+  transform: translate(-50%, 0);
+}
+/* 小三角跟着气泡居中 */
+.hotspot .speech-bubble::after { left: 50%; transform: translateX(-50%); }
+
+/* 窄屏气泡自适应：宽度跟随视口，避免为了塞下固定 238px 而挤走人物。
+   （414px 竖屏装不下 238px 气泡，若不缩窄，边缘人物会被推出画面） */
+@media (max-width: 760px) {
+  .speech-bubble {
+    max-width: min(238px, 58vw);
+    font-size: 12px;
+    line-height: 1.6;
+    padding: 8px 10px 9px 15px;
+  }
+}
+
+/* 接地阴影：人物脚下的一圈柔和椭圆，保证「站在地上」的视觉确定性。
+   挂在 .char-wrap::before 上 —— 它在 DOM 顺序里先于 .char-vis，
+   一定垫在人物身后；且 .char-wrap 不被 clip-path 裁剪，阴影完整 */
+.hotspot .char-wrap::before {
+  content: '';
+  position: absolute;
+  left: 50%; bottom: 0;
+  width: 74%; height: 7.5%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center,
+    rgba(28, 20, 12, .46) 0%,
+    rgba(28, 20, 12, .26) 44%,
+    rgba(28, 20, 12, 0) 72%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .8s ease .25s;
+}
+.hotspot.lit .char-wrap::before { opacity: 1; }
+
+/* 出现瞬间的光圈 */
+.hotspot.out::after {
+  content: '';
+  position: absolute;
+  left: 50%; bottom: 6%;
+  width: 100px; height: 100px;
+  margin-left: -50px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 210, 150, .9);
+  opacity: 0;
+  pointer-events: none;
+}
+.hotspot.revealing::after { animation: ripple .65s ease-out; }
+@keyframes ripple {
+  0%   { opacity: .9; transform: scale(.3); }
+  100% { opacity: 0;  transform: scale(1.6); }
+}
+
+/* =========================================================
+   街景 SVG 配色 —— 青岛90年代
+   ========================================================= */
+.sky { fill: url(#skyGrad); }
+.f-cloud, .s-cloud { fill: none; stroke: #a8b4b8; stroke-width: 2.4; stroke-linecap: round; }
+.f-sun { fill: #d9c98a; opacity: .75; }
+
+.f-far { fill: #a99e92; }
+.f-far-line { fill: none; stroke: #948a7e; stroke-width: 1.6; }
+.s-laundry { fill: none; stroke: rgba(232, 224, 200, .5); stroke-width: 1.6; }
+
+.f-brick { fill: #a8705a; }
+.s-brick { fill: none; stroke: #7d4c3c; stroke-width: 2.2; stroke-linejoin: round; }
+.f-peel { fill: #b9ac99; }
+.win { fill: #7d8a90; opacity: .7; }
+.win-lit { fill: #e8c87a; opacity: .9; }
+.f-laundry { fill: #cfc6ae; opacity: .8; }
+.f-clothes-a { fill: #c96a5a; opacity: .85; }
+.f-clothes-b { fill: #6d8a9c; opacity: .85; }
+.s-clothesline { fill: none; stroke: rgba(60, 52, 44, .55); stroke-width: 1.4; }
+
+.f-unitdoor { fill: #4a6b56; }
+.s-unitdoor { fill: none; stroke: #2f4a3a; stroke-width: 2; }
+.f-shutter { fill: #a8b0b4; }
+.s-shutter-line { fill: none; stroke: #7d858a; stroke-width: 1.2; }
+.f-boardsign { fill: #c8b189; }
+.s-boardsign { fill: none; stroke: var(--red); stroke-width: 2.4; stroke-linecap: round; }
+.f-step { fill: #a8a396; }
+.f-door { fill: #7f7461; }
+.f-ac { fill: #a8a294; }
+.s-ac { fill: none; stroke: #7d7362; stroke-width: 1.4; }
+.f-rust { fill: none; stroke: #9c5a32; stroke-width: 2; opacity: .7; }
+
+.s-pole { fill: none; stroke: #8d8577; stroke-width: 3.4; stroke-linecap: round; }
+.f-pole-base { fill: #a89c86; }
+.s-wire { fill: none; stroke: rgba(70, 62, 54, .6); stroke-width: 1.5; }
+
+.f-ground { fill: #c4bda6; }
+.f-road { fill: #8e8a80; }
+.s-edge { fill: none; stroke: #6f6a60; stroke-width: 2; }
+.s-tile { fill: none; stroke: rgba(110, 104, 92, .5); stroke-width: 1.4; }
+.s-dash { fill: none; stroke: rgba(232, 224, 200, .5); stroke-width: 4; stroke-linecap: round; }
+.s-crack { fill: none; stroke: rgba(90, 84, 76, .5); stroke-width: 1.4; }
+
+.f-trunk { fill: #6b5545; }
+.s-branch { fill: none; stroke: #5a4638; stroke-width: 2.4; stroke-linecap: round; }
+.f-canopy { opacity: .82; }
+.f-canopy.c-0 { fill: #6d8a56; }
+.f-canopy.c-1 { fill: #7d9a62; }
+.f-canopy.c-2 { fill: #5f7c4c; }
+.f-treeshadow { fill: rgba(70, 84, 56, .18); }
+
+.f-bin { fill: #4a7a52; }
+.f-bin-lid { fill: #3a6341; }
+
+.f-bench { fill: #8a6f45; stroke: #4a3d29; stroke-width: 1.8; }
+.s-bench { fill: none; stroke: #6f5c3e; stroke-width: 1.8; stroke-linecap: round; }
+.f-wood { fill: #c9a86a; stroke: #8a6a3a; stroke-width: 1.6; }
+.f-plane { fill: #a8b0b4; stroke: #6f7679; stroke-width: 1.6; }
+.f-shaving { fill: #ddc48e; opacity: .92; }
+.s-saw { fill: none; stroke: #8d8577; stroke-width: 2.2; stroke-linecap: round; }
+.f-stove { fill: #6d6154; stroke: #3f382f; stroke-width: 2; }
+.f-stove-top { fill: #8d7f6d; }
+.s-smoke { fill: none; stroke: rgba(220, 216, 200, .55); stroke-width: 2.4; stroke-linecap: round; }
+.f-box { fill: #7d6544; stroke: #4a3d29; stroke-width: 2.2; }
+.s-box { fill: none; stroke: #6f5c3e; stroke-width: 1.6; }
+.f-shoe { fill: #4a423a; stroke: #2b2622; stroke-width: 1.6; }
+.f-umbrella { fill: #a8442f; stroke: #5e2a1c; stroke-width: 2.4; }
+.s-umb { fill: none; stroke: rgba(43, 38, 34, .35); stroke-width: 1.2; }
+.f-stool-seat { fill: #b5784a; stroke: #7a4f2c; stroke-width: 1.4; }
+.s-stool { fill: none; stroke: #6b5b45; stroke-width: 1.8; stroke-linecap: round; }
+.f-cart { fill: #6d5a3a; stroke: #3f3524; stroke-width: 2.2; }
+.f-wheel { fill: #3d362e; }
+.s-wheel { fill: none; stroke: #241f19; stroke-width: 2; }
+.f-pot { fill: #4a4238; stroke: #2b2622; stroke-width: 2; }
+.f-broth { fill: #c96a2f; }
+.f-cup { fill: #a8603a; stroke: #6b3d22; stroke-width: 1.6; }
+.s-stick { fill: none; stroke: #d9c49a; stroke-width: 2; stroke-linecap: round; }
+.f-banner { fill: #b8442f; stroke: #7a2a1c; stroke-width: 2; }
+.s-banner { fill: none; stroke: var(--paper); stroke-width: 2.2; stroke-linecap: round; }
+.f-foldtable { fill: #b5784a; stroke: #7a4f2c; stroke-width: 1.4; }
+
+.f-shopfront { fill: #7a6f59; stroke: #453d2e; stroke-width: 2.4; }
+.f-shopwin { fill: #c9b287; stroke: #4a4130; stroke-width: 2; }
+.f-mirror { fill: #cfd8cf; stroke: #5c5248; stroke-width: 1.8; }
+.s-mirror-shine { fill: none; stroke: #fff; stroke-width: 2; opacity: .8; }
+.s-fadedred { fill: none; stroke: rgba(168, 68, 47, .65); stroke-width: 2.4; stroke-linecap: round; }
+.f-pole-light { fill: #c9523c; }
+.s-stripe { fill: none; stroke: var(--paper); stroke-width: 3; }
+.s-stripe-b { fill: none; stroke: #3f6ba8; stroke-width: 3; }
+.f-radio { fill: #8a7a5a; stroke: #5a4e38; stroke-width: 1.4; }
+.s-radio { fill: none; stroke: #5a4e38; stroke-width: 1.4; }
+.f-scissor-ring { fill: none; stroke: #5c5248; stroke-width: 2.2; }
+.s-scissor { fill: none; stroke: #5c5248; stroke-width: 2.4; stroke-linecap: round; }
+
+.s-bike { fill: none; stroke: #3d362e; stroke-width: 2.6; stroke-linecap: round; }
+.f-hub { fill: #8d8577; }
+.f-toolbox { fill: #5f7a6a; stroke: #3a4a40; stroke-width: 1.8; }
+.f-key { fill: none; stroke: var(--gold); stroke-width: 2.4; }
+.s-key { fill: none; stroke: var(--gold); stroke-width: 2.2; stroke-linecap: round; }
+.f-pump { fill: #7a6f59; stroke: #453d2e; stroke-width: 1.6; }
+.s-foot { fill: none; stroke: rgba(90, 84, 76, .55); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 4 6; }
+
+.f-flyer { fill: #d4cbb4; stroke: #9a9080; stroke-width: 1.2; }
+.s-flyer { fill: none; stroke: var(--red); stroke-width: 1.6; stroke-linecap: round; }
+
+.f-bulb { fill: #f4e3b0; }
+.bulb-glow { fill: #f4d98a; opacity: .38; animation: bulbFlicker 3.2s ease-in-out infinite; }
+@keyframes bulbFlicker {
+  0%, 100% { opacity: .34; }
+  42% { opacity: .46; }
+  46% { opacity: .2; }
+  50% { opacity: .44; }
+}
+.f-mini-lant { fill: #c04a32; }
+.f-lant-cap { fill: var(--gold); }
+.f-lant { fill: #b6ab96; }
+.lantern.lit .f-lant { fill: var(--red-2); }
+.lantern-body { filter: grayscale(1) brightness(.72); opacity: .55; transition: filter .7s, opacity .7s; }
+.lantern.lit .lantern-body { filter: none; opacity: 1; }
+.lantern-glow { fill: var(--gold); opacity: 0; filter: blur(14px); transition: opacity .9s; }
+.lantern.lit .lantern-glow { opacity: .6; }
+.s-lant-rib { fill: none; stroke: rgba(43, 38, 34, .5); stroke-width: 1.4; }
+.s-lant-cord, .s-lant-tassel { fill: none; stroke: var(--ink-2); stroke-width: 1.4; }
+.lantern.lit .s-lant-tassel { stroke: var(--gold); }
+
+.f-shopdoor { fill: #8fa8a0; stroke: #4a5c56; stroke-width: 2; }
+.f-lightbox { fill: var(--green-2); stroke: #1c2e27; stroke-width: 2; }
+.s-lightbox { fill: none; stroke: var(--paper); stroke-width: 2.6; stroke-linecap: round; }
+.f-lightbox-dead { fill: #4a5a52; }
+.f-bed { fill: #b5784a; stroke: #7a4f2c; stroke-width: 1.8; }
+.s-bed { fill: none; stroke: #6b5b45; stroke-width: 1.8; stroke-linecap: round; }
+.s-jar { fill: none; stroke: #9fb8bd; stroke-width: 1.4; }
+.f-apple { fill: #c9402e; stroke: #8a2418; stroke-width: 1.4; }
+.s-apple { fill: none; stroke: #5f7a3e; stroke-width: 1.6; stroke-linecap: round; }
+.f-basket { fill: #c2a06a; stroke: #8a6c3c; stroke-width: 1.6; }
+.s-basket { fill: none; stroke: #8a6c3c; stroke-width: 1.2; }
+.f-melon { fill: #6f9a52; stroke: #4a6f34; stroke-width: 1.4; }
+.f-plate { fill: #d8d0bc; stroke: #9a927e; stroke-width: 1.4; }
+.apple-trace { opacity: .22; transition: opacity .9s ease; }
+.stage-wrap.has-liu .apple-trace { opacity: 1; }
+
+.s-steam { fill: none; stroke: rgba(240, 236, 222, .8); stroke-width: 2.6; stroke-linecap: round; }
+.steam-0 { animation: steamRise 3.0s ease-in-out infinite; }
+.steam-1 { animation: steamRise 3.8s ease-in-out .4s infinite; }
+.steam-2 { animation: steamRise 3.4s ease-in-out .9s infinite; }
+@keyframes steamRise {
+  0%   { opacity: 0; transform: translateY(10px); }
+  25%  { opacity: .85; }
+  100% { opacity: 0; transform: translateY(-26px); }
+}
+
+.tree-shadow { animation: swayShadow 9s ease-in-out infinite; }
+@keyframes swayShadow {
+  0%, 100% { transform: translateX(0) skewX(0deg); }
+  25% { transform: translateX(10px) skewX(1.6deg); }
+  50% { transform: translateX(-6px) skewX(-1.2deg); }
+  75% { transform: translateX(8px) skewX(1.2deg); }
+}
+.locust-tree {
+  animation: swayTree 9s ease-in-out infinite;
+  transform-box: fill-box; transform-origin: bottom center;
+}
+@keyframes swayTree {
+  0%, 100% { transform: rotate(0deg); }
+  30% { transform: rotate(.5deg); }
+  65% { transform: rotate(-.4deg); }
+}
+
+.barber-stripes { animation: barberSpin 2.6s linear infinite; }
+@keyframes barberSpin { from { transform: translateY(0); } to { transform: translateY(22px); } }
+
+.keyring {
+  animation: keySwing 2.2s ease-in-out infinite;
+  transform-box: fill-box; transform-origin: top center;
+}
+@keyframes keySwing {
+  0%, 100% { transform: rotate(-4deg); }
+  50% { transform: rotate(4deg); }
+}
+
+.coalstove .s-smoke { animation: smokeRise 4.5s ease-in-out infinite; }
+@keyframes smokeRise {
+  0% { opacity: 0; transform: translateY(4px); }
+  30% { opacity: .6; }
+  100% { opacity: 0; transform: translateY(-18px); }
+}
+
+.shaving {
+  animation: shavingDrift 6s ease-in-out infinite;
+  transform-box: fill-box; transform-origin: center;
+}
+.sh-1 { animation: shavingDrift 5.2s .6s infinite; }
+.sh-2 { animation: shavingDrift 7s 1.2s infinite; }
+@keyframes shavingDrift {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); opacity: .92; }
+  40% { transform: translate(-3px, -5px) rotate(-8deg); opacity: 1; }
+}
+
+.lightbox { animation: lightboxBuzz 4.5s ease-in-out infinite; }
+@keyframes lightboxBuzz {
+  0%, 88%, 100% { opacity: 1; }
+  90% { opacity: .72; }
+  93% { opacity: 1; }
+  96% { opacity: .8; }
+}
+.jar-0 { opacity: .9; } .jar-1 { opacity: .7; } .jar-2 { opacity: .95; }
+
+.s-person { fill: none; stroke: var(--pc, #4a423a); stroke-width: 2.4; stroke-linecap: round; }
+.f-person { fill: var(--pc, #4a423a); }
+.f-head { fill: #ddc9a5; }
+.f-hair { fill: #4a423a; }
+
+/* =========================================================
+   三幕时间线：清晨 → 午后 → 黄昏 → 夜市
+   ========================================================= */
+.stage-wrap.act-dawn  .bg-layer { filter: sepia(.14) contrast(1.04) brightness(.97); }
+.stage-wrap.act-noon  .bg-layer { filter: saturate(1.05) brightness(1.06) contrast(1.02); }
+.stage-wrap.act-dusk  .bg-layer { filter: sepia(.3) contrast(1.02) brightness(.84); }
+.stage-wrap.act-night .bg-layer { filter: brightness(.46) saturate(.7) sepia(.28); }
+
+.stage-wrap.act-dusk  { background: #3a2f2a; }
+.stage-wrap.act-night { background: #1c242a; }
+.stage-wrap.act-night .win { fill: #2f3d44; opacity: .85; }
+.stage-wrap.act-night .win-lit { fill: #e8b95a; opacity: 1; }
+.stage-wrap.act-night .f-ground { fill: #4a5058; }
+.stage-wrap.act-night .f-road { fill: #333a41; }
+.stage-wrap.act-night .f-treeshadow { fill: rgba(20, 28, 34, .3); }
+.stage-wrap.act-night .f-mini-lant { fill: #e05a3a; }
+.stage-wrap.act-night .f-bulb { fill: #ffe9a8; }
+.stage-wrap.act-night .bulb-glow { opacity: .6; }
+.stage-wrap.act-dusk .f-mini-lant { fill: #d4623a; }
+
+.act-label {
+  position: absolute;
+  left: 50%; top: 12px;
+  transform: translateX(-50%);
+  z-index: 14;
+  font-family: var(--kai);
+  font-size: 12px;
+  letter-spacing: 4px;
+  color: var(--paper);
+  background: rgba(28, 20, 13, .78);
+  border: 1px solid var(--bar-line);
+  padding: 4px 16px;
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  transition: opacity .6s;
+}
+.act-label.show { opacity: 1; }
+
+.relation-note {
+  position: absolute;
+  left: 50%; bottom: 46px;        /* 抬到底部细字副标题上方，不再叠在一起 */
+  transform: translate(-50%, 14px);
+  z-index: 30;
+  max-width: min(680px, 90%);
+  font-family: var(--kai);
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--ink);
+  /* 与对话气泡同款「老招牌纸签」：纸面渐变 + 墨框 + 内圈白描边 */
+  background: linear-gradient(180deg, #f8f1de 0%, #f0e5cc 55%, #e6d7ba 100%);
+  border: 1.5px solid var(--ink);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 0 0 2.5px rgba(255, 252, 244, .72),
+    0 6px 20px rgba(0, 0, 0, .5);
+  padding: 10px 18px 10px 24px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .5s, transform .5s;
+}
+.relation-note::before {
+  content: '';
+  position: absolute;
+  left: 9px; top: 10px; bottom: 10px;
+  width: 2.5px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--red-2), rgba(168, 68, 47, .35));
+}
+.relation-note.show { opacity: 1; transform: translate(-50%, 0); }
+
+.scroll-rail {
+  position: absolute;
+  left: 6%; right: 6%; bottom: 8px;
+  height: 4px;
+  background: rgba(255, 255, 255, .1);
+  border-radius: 2px;
+  z-index: 20;
+  /* ★ 纯指示条，不接管任何指针事件。
+     它横跨屏幕底部（bottom:8px，高 4px）且 z-index:20，
+     会压在贴地那盏呼吸灯（王姐，灯心 y≈98.5%）之上 ——
+     实测：点在灯上的那一小段落到了 .scroll-thumb 上，
+     而点击监听挂在 #hitLayer 上，事件根本不经过它 → 灯点不动。
+     拖动街景的 pointerdown 挂在 .stage-wrap，穿透后照旧生效，
+     所以这里放开指针事件不会影响横拖。 */
+  pointer-events: none;
+}
+.scroll-thumb {
+  display: block;
+  height: 4px;
+  background: var(--gold);
+  border-radius: 2px;
+  opacity: .7;
+}
+
+/* =========================================================
+   角色档案卡
+   ========================================================= */
+.mask {
+  position: fixed; inset: 0;
+  z-index: 300;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  background: rgba(15, 10, 5, .8);
+  backdrop-filter: blur(4px);
+  opacity: 0; pointer-events: none;
+  transition: opacity .3s;
+}
+.mask.show { opacity: 1; pointer-events: auto; }
+
+.card {
+  position: relative;
+  width: min(540px, 100%);
+  max-height: 88vh;
+  overflow: auto;
+  background: var(--paper);
+  border: 1.5px solid var(--paper-3);
+  border-radius: 6px;
+  padding: 26px 28px 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .8);
+  transform: translateY(40px) scale(.95);
+  opacity: 0;
+  transition: transform .4s cubic-bezier(.34, 1.56, .64, 1), opacity .3s;
+}
+.mask.show .card { transform: translateY(0) scale(1); opacity: 1; }
+
+.card .tape {
+  position: absolute; top: -12px; left: 50%;
+  width: 118px; height: 26px;
+  transform: translateX(-50%) rotate(-2deg);
+  background: rgba(212, 197, 176, .72);
+  border-left: 1px dashed rgba(120, 102, 72, .45);
+  border-right: 1px dashed rgba(120, 102, 72, .45);
+}
+
+.card-head {
+  display: flex; align-items: flex-start; gap: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed var(--paper-3);
+}
+.avatar-box {
+  position: relative;
+  flex: 0 0 auto;
+  width: 104px; height: 104px;
+  display: grid; place-items: center;
+  background: var(--paper-2);
+  border: 1.5px solid var(--ink-2);
+  border-radius: 50%;
+  overflow: hidden;
+}
+.avatar-box img { width: 94px; height: 94%; object-fit: contain; object-position: bottom center; }
+
+.card-meta { flex: 1; min-width: 0; }
+.role-tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10px; letter-spacing: 1.5px;
+  padding: 2px 7px;
+  color: var(--paper);
+  background: var(--green);
+  margin-bottom: 6px;
+}
+.role-name {
+  font-family: var(--song);
+  font-size: 25px; font-weight: 700;
+  letter-spacing: 3px;
+  line-height: 1.15;
+}
+.role-title {
+  font-family: var(--kai);
+  font-size: 13px;
+  color: var(--red);
+  letter-spacing: 1px;
+  margin-top: 4px;
+}
+
+.role-body { padding-top: 14px; }
+.role-quote {
+  position: relative;
+  font-family: var(--kai);
+  font-size: 16.5px;
+  line-height: 1.8;
+  letter-spacing: 1px;
+  padding: 12px 14px 12px 16px;
+  background: var(--paper-2);
+  border-left: 3px solid var(--gold);
+  margin-bottom: 16px;
+}
+.role-quote::before {
+  content: '\201C';
+  position: absolute; left: 6px; top: -2px;
+  font-size: 30px;
+  color: rgba(138, 63, 52, .3);
+}
+
+.card-divider { width: 40px; height: 2px; background: var(--gold); margin-bottom: 14px; }
+
+.stat-grid { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.stat-row { display: flex; align-items: center; gap: 10px; }
+.stat-k {
+  flex: 0 0 62px;
+  font-family: var(--kai);
+  font-size: 13px; letter-spacing: 1.5px;
+  color: var(--ink-2);
+}
+.stat-track {
+  position: relative;
+  flex: 1; height: 12px;
+  background: var(--paper-2);
+  border: 1px solid var(--paper-3);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.stat-track::before {
+  content: '';
+  position: absolute; left: 50%; top: 0; bottom: 0;
+  width: 1px; background: var(--paper-3);
+}
+.stat-fill {
+  position: absolute; top: 1px; bottom: 1px;
+  left: 50%;
+  background: var(--green);
+  transition: width .9s cubic-bezier(.22, 1, .36, 1);
+}
+.stat-fill.neg { background: var(--red); }
+.stat-v {
+  flex: 0 0 40px; text-align: right;
+  font-family: var(--mono); font-size: 13px; font-weight: 700;
+}
+.stat-v.neg { color: var(--red); }
+
+.role-info {
+  display: flex; flex-wrap: wrap; gap: 8px 18px;
+  font-family: var(--kai);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  padding-bottom: 12px;
+}
+.role-info b { color: var(--ink); font-weight: 400; border-bottom: 1px solid var(--paper-3); }
+
+.role-bio {
+  font-family: var(--kai);
+  font-size: 14px; line-height: 1.95;
+  color: var(--ink-2);
+  text-align: justify;
+}
+.role-note {
+  margin-top: 10px;
+  padding: 9px 12px;
+  font-family: var(--kai);
+  font-size: 12.5px; line-height: 1.8;
+  color: var(--green-2);
+  background: rgba(74, 107, 86, .1);
+  border: 1px dashed var(--green);
+}
+
+.role-relation {
+  display: none;
+  margin-top: 10px;
+  padding: 9px 13px;
+  font-family: var(--kai);
+  font-size: 12.5px; line-height: 1.8;
+  color: #6b4a1f;
+  background: rgba(201, 155, 95, .14);
+  border: 1px dashed var(--gold);
+}
+.role-relation.show { display: block; }
+.role-relation em { font-style: normal; font-weight: 700; color: var(--red); }
+
+.card-foot {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 18px; padding-top: 14px;
+  border-top: 1px dashed var(--paper-3);
+}
+.stamp {
+  font-family: var(--kai);
+  font-size: 12px; letter-spacing: 2px;
+  color: var(--red);
+  border: 1.5px solid var(--red);
+  padding: 3px 10px;
+  transform: rotate(-5deg);
+  opacity: .82;
+}
+.card-close {
+  margin-left: auto;
+  padding: 9px 22px;
+  background: var(--panel-2);
+  color: var(--paper);
+  border: none;
+  border-radius: 4px;
+  font-family: var(--kai);
+  font-size: 13px; letter-spacing: 2px;
+  cursor: pointer;
+  transition: background .2s;
+}
+.card-close:hover { background: var(--gold); color: var(--ink); }
+
+/* =========================================================
+   结局全景
+   ========================================================= */
+/* 结局页：固定不滚动（内容已精简，删掉重复的六条关系网 + 压缩长诗）
+   背景是虚化的同一条街，与开场页统一视觉语言 */
+.finale {
+  position: fixed; inset: 0;
+  z-index: 400;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 12px;                       /* 收紧间距，保证整页不滚动 */
+  padding: 20px 24px;
+  background-color: var(--bg-dark);
+  background-size: cover;
+  background-position: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity .9s;
+  overflow: hidden;                /* 固定住，不上下滚动 */
+}
+/* 虚化街景层（背景图由 app.js 注入 .finale-bg，URL 只能写在这里 → 见 app.js） */
+.finale .finale-bg {
+  position: absolute; inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(9px) saturate(.7) brightness(.88);
+  transform: scale(1.3);
+  z-index: 0;
+}
+/* 压暗层，保证前景卡片清晰（力度均匀，避免上下色差） */
+.finale::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(18, 12, 8, .36), rgba(18, 12, 8, .40));
+  z-index: 1;
+  pointer-events: none;
+}
+.finale > * { position: relative; z-index: 2; }
+.finale.show { opacity: 1; pointer-events: auto; }
+
+.panorama {
+  width: min(620px, 100%);
+  max-height: calc(100vh - 92px);   /* 给上下按钮留出空间 */
+  overflow-y: auto;                 /* 内容超高时卡片内部滚动，页面本身不动 */
+  background: var(--paper);
+  border-radius: 8px;
+  padding: 26px 34px 28px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .8);
+  transform: translateY(20px);
+  transition: transform .9s cubic-bezier(.22, 1, .36, 1);
+}
+.finale.show .panorama { transform: translateY(0); }
+.panorama h2 {
+  font-family: var(--kai);
+  font-size: 26px;
+  letter-spacing: 6px;
+  text-align: center;
+  margin-bottom: 22px;
+}
+
+/* 操作提示：放在头像【下方】，做成醒目的引导条 */
+.finale-hint {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 18px auto 20px;
+  padding: 9px 22px;
+  font-family: var(--kai);
+  font-size: 14px;
+  letter-spacing: 1.5px;
+  color: var(--ink);
+  background: rgba(201, 155, 95, .16);   /* 暖黄灯光底衬 */
+  border: 1.5px solid var(--gold);
+  border-radius: 40px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, .12);
+  opacity: 0;
+}
+.finale-hint b {
+  color: var(--red);
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+.finale.show .finale-hint { animation: pop .8s .95s forwards; }
+.hint-dot {
+  width: 7px; height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 0 3px rgba(138, 63, 52, .18);
+  animation: hintPulse 1.9s ease-in-out infinite;
+}
+@keyframes hintPulse {
+  0%, 100% { opacity: .35; transform: scale(.85); }
+  50%      { opacity: 1;   transform: scale(1.25); }
+}
+@media (max-width: 760px) {
+  .ava-row { max-width: 340px; gap: 16px 8px; }
+  .finale-hint { font-size: 12.5px; letter-spacing: 1px; padding: 8px 16px; margin: 14px auto 16px; }
+}
+/* 头像：每排三个，居中排列 */
+.ava-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  justify-items: center;
+  gap: 20px 12px;
+  max-width: 520px;          /* 三列宽度上限，保证整体居中 */
+  margin: 4px auto 0;
+}
+.ava-cell {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  opacity: 0; transform: translateY(14px);
+  cursor: pointer;
+  padding: 6px 4px 4px;
+  border: none; background: none;
+  border-radius: 10px;
+  transition: background .25s, transform .25s;
+}
+.ava-cell:hover, .ava-cell:focus-visible {
+  background: rgba(201, 106, 74, .1);
+  outline: none;
+}
+.ava-cell:hover .ring, .ava-cell:focus-visible .ring {
+  transform: translateY(-3px) scale(1.06);
+  border-color: var(--red);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .18);
+}
+.ava-cell .ring {
+  width: 66px; height: 66px;
+  display: grid; place-items: center;
+  background: var(--paper-2);
+  border: 2px solid var(--gold);
+  border-radius: 50%;
+  overflow: hidden;
+  filter: sepia(.25);
+  transition: transform .25s, border-color .25s, box-shadow .25s;
+}
+/* 悬停提示 */
+.ava-cell .story-hint {
+  font-family: var(--kai);
+  font-size: 10.5px;
+  color: var(--red);
+  letter-spacing: 1px;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity .25s, transform .25s;
+}
+.ava-cell:hover .story-hint, .ava-cell:focus-visible .story-hint {
+  opacity: 1; transform: translateY(0);
+}
+.finale.show .ava-cell { animation: pop .6s cubic-bezier(.22, 1, .36, 1) forwards; }
+@keyframes pop { to { opacity: 1; transform: translateY(0); } }
+.ava-cell .ring img { width: 92%; height: 92%; object-fit: contain; object-position: bottom center; }
+.ava-cell .nm { font-family: var(--kai); font-size: 11.5px; color: var(--ink-2); }
+
+/* ---------- 人物故事弹层 ---------- */
+.story-panel {
+  position: fixed; inset: 0;
+  z-index: 460;
+  display: grid; place-items: center;
+  padding: 32px 20px;
+  /* 背景：接到背景图的模糊状态（像开场页一样），只轻微压暗，不再是死黑 */
+  background: rgba(46, 34, 24, .28);
+  backdrop-filter: blur(16px) saturate(.85) brightness(.96);
+  -webkit-backdrop-filter: blur(16px) saturate(.85) brightness(.96);
+  opacity: 0; visibility: hidden;
+  transition: opacity .34s ease, visibility .34s;
+}
+.story-panel.show { opacity: 1; visibility: visible; }
+
+.story-card {
+  position: relative;
+  width: min(760px, 100%);
+  max-height: 82vh;
+  /* 左文字 / 右立绘：横向两栏，人物「站在」卡面右侧 */
+  display: flex;
+  align-items: stretch;
+  gap: 22px;
+  padding: 34px 30px 34px 40px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .5);
+  transform: translateY(18px) scale(.98);
+  transition: transform .32s cubic-bezier(.22, 1, .36, 1);
+}
+.story-panel.show .story-card { transform: translateY(0) scale(1); }
+
+/* 左侧文字栏：内部滚动。★ 滚动必须落在这一栏，不能落在整张卡片上 ——
+   否则越过卡片高度时会把右侧立绘一起卷走、出现半个人。
+   min-height:0 是 flex 子项能真正滚动的开关（默认 min-height:auto 会撑破）。 */
+.story-main {
+  position: relative;
+  z-index: 2;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  max-height: calc(82vh - 68px);
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.story-close {
+  position: absolute; top: 12px; right: 14px;
+  width: 32px; height: 32px;
+  font-size: 22px; line-height: 1;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1.5px solid var(--paper-3);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background .2s, color .2s, border-color .2s;
+}
+.story-close:hover { background: var(--red); color: var(--paper); border-color: var(--red); }
+
+.story-head { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px dashed var(--paper-3); }
+.story-head h3 {
+  margin: 0 0 5px;
+  font-family: var(--kai);
+  font-size: 25px;
+  letter-spacing: 3px;
+  color: var(--red);
+}
+.story-sub { margin: 0; font-size: 12.5px; color: var(--ink-faint); letter-spacing: 1px; }
+
+.story-body { font-family: var(--kai); font-size: 15.5px; line-height: 2.05; color: var(--ink-2); }
+.story-body p { margin: 0 0 14px; text-align: justify; }
+.story-body .story-murmur {
+  margin: 18px 0 0 !important;
+  padding-top: 12px;
+  border-top: 1px dashed var(--paper-3);
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: var(--ink-faint);
+  text-align: center;
+  letter-spacing: 1px;
+}
+/* 尾句前的 🍎 已按要求去掉：这里不再插任何图标，让尾句干干净净地居中 */
+/* 引言框：只放台词，占满整行 */
+.story-body .story-lead {
+  position: relative;
+  padding: 14px 18px 12px;
+  margin-bottom: 18px !important;
+  font-size: 16px;
+  line-height: 1.9;
+  color: var(--ink);
+  background: rgba(201, 106, 74, .09);
+  border-left: 3px solid var(--red);
+  border-radius: 0 6px 6px 0;
+}
+.story-body .story-lead p { margin: 0; }
+
+/* 右侧人物大立绘：直接站在卡面右边（全彩、不压淡、不描边），
+   和左侧文字一样是「主角」；脚下投一层柔和落影让它站在纸上。 */
+.story-figure {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 248px;
+  align-self: flex-end;
+}
+.story-figure img {
+  height: min(52vh, 372px);
+  width: auto;
+  max-width: 248px;
+  object-fit: contain;
+  object-position: bottom center;
+  filter: drop-shadow(0 12px 20px rgba(60, 40, 20, .28));
+  user-select: none;
+  -webkit-user-drag: none;
+}
+/* 文字栏 / 标题仍在立绘之上，保证可读性（立绘在最底层） */
+.story-head, .story-body { position: relative; z-index: 1; }
+@media (max-width: 760px) {
+  /* 窄屏：左右两栏放不下，立绘退回成右下角的一层淡影（原来的做法），
+     文字占满整张卡 —— 保证任何手机上正文都能读。 */
+  .story-card { display: block; padding: 26px 20px 24px; }
+  .story-main { max-height: calc(82vh - 52px); }
+  .story-head h3 { font-size: 21px; }
+  .story-body { font-size: 14.5px; line-height: 1.95; }
+  .story-body .story-lead { padding: 12px 13px 10px; font-size: 14.5px; }
+  .story-figure {
+    position: absolute; right: 4px; bottom: 0;
+    width: 148px; height: auto;
+    opacity: .15; z-index: 0;
+  }
+  .story-figure img { height: 200px; max-width: 148px; }
+}
+
+/* 故事卡左右翻页箭头：暗金磨砂圆钮，贴在视口两侧。
+   .story-panel 是 fixed inset:0，所以这里 position:absolute 就相对整屏定位。
+   z-index 5 —— 高于卡片(2)与两条藤蔓(1/3)，保证不被藤叶压住。 */
+.story-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 52px; height: 52px;
+  display: grid; place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--paper);
+  background: rgba(26, 18, 13, .5);
+  border: 1.5px solid rgba(201, 155, 95, .55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .4);
+  cursor: pointer;
+  z-index: 5;
+  transition: background .2s, border-color .2s, transform .2s;
+}
+.story-nav svg { width: 22px; height: 22px; display: block; }
+.story-nav:hover { background: var(--red); border-color: var(--red); transform: translateY(-50%) scale(1.1); }
+.story-nav:active { transform: translateY(-50%) scale(.94); }
+.story-nav.prev { left: max(2vw, 14px); }
+.story-nav.next { right: max(2vw, 14px); }
+@media (max-width: 760px) {
+  .story-nav { width: 42px; height: 42px; }
+  .story-nav svg { width: 18px; height: 18px; }
+}
+
+.finale-poem {
+  font-family: var(--kai);
+  font-size: 13px; line-height: 2.15;
+  color: var(--ink);
+  text-align: center;
+  letter-spacing: 1px;
+}
+/* 每人一独立成行 */
+.finale-poem span { display: block; }
+.finale-poem .highlight { color: var(--red); font-weight: 700; }
+/* 开头两句：墨色，稍大 */
+.finale-poem .poem-lead {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 2.1;
+  margin-bottom: 4px;
+}
+/* 六位街坊：淡墨小字，每人一行 */
+.finale-poem .poem-line {
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 2.05;
+}
+/* 最后一行（林姐）作为收束，用招牌红 */
+.finale-poem .poem-lead-last { color: var(--red); }
+/* 收尾 */
+.finale-poem .poem-end {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+/* 结局页动作：只剩「回看街道」一颗，挪到右下角，与右下角的「关于」上下排列。
+   ★ 位置用 position:fixed 钉在视口（.finale 自身没有 transform/filter，
+     所以不会成为包含块）—— 原来它在 .finale 的纵向流里居中，
+     和标题、提示条挤在一起；挪走后中间那块全留给人物的环形舞台。
+   ★ 必须用 `.finale > .finale-actions` 提高优先级：上面那条
+     `.finale > * { position: relative }` 会把它的定位改回 relative。
+   向上抬到 60px，把 16px 处的位置让给「关于」。 */
+.finale > .finale-actions {
+  position: fixed;
+  right: 18px;
+  bottom: 60px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  opacity: 0;
+}
+.finale.show .finale-actions { animation: pop .8s 1.3s forwards; }
+
+/* =========================================================
+   开场 & 提示条
+   ========================================================= */
+/* 开场引导：背景是虚化的街景，让人一进来就看见这条街
+   （背景图由 app.js 用内联 <style> 注入，避免 url() 相对路径解析成 css/assets/… 而 404） */
+/* 开场引导
+   ★ 关键：用 position:absolute 而不是 fixed。
+     fixed + overflow-y:auto 时，inset:0 的 ::before/::after 只覆盖【视口】，
+     内容滚动后下方就露出背景色（用户反馈"往下滑亮度不统一"）。
+     改成 absolute 后容器高度随内容撑开，背景层始终铺满整个可滚动区域。 */
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  overflow: hidden;                 /* 第一页固定：整页不允许上下滑动 */
+  background: var(--bg-dark);
+  transition: opacity .6s;
+}
+.intro.hide { opacity: 0; pointer-events: none; }
+
+/* 街景虚化层：从「几乎清楚」到完全清楚的对焦点。
+   ★ 开场页在加载页底下时就是 blur 2px（不是另一次模糊），
+     加载页淡出后由 .focus 动画把模糊降到 0，正好接上街道页的清晰背景；
+     原来这里一上来就 blur 9px，和加载页末的 7px 拼成「糊→另一种糊→突然清楚」三段跳。
+   ★ background 简写必须写出 size：图片地址由 app.js 注入 background-image，
+     简写与注入互相覆盖会让 size 退回 auto，背景按原图像素绘制、不铺满。 */
+.intro::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: center / cover no-repeat;
+  filter: blur(2px) saturate(.82) brightness(.94);
+  transform: scale(1.35);   /* 放大取画面中部，避免图像底部（较亮路面）造成上下亮度差 */
+  z-index: 0;
+}
+.intro.focus::before { animation: introFocus 2.2s cubic-bezier(.4, 0, .2, 1) forwards; }
+@keyframes introFocus {
+  from { filter: blur(2px) saturate(.82) brightness(.94); transform: scale(1.35); }
+  to   { filter: blur(0)   saturate(.88) brightness(.97); transform: scale(1.18); }
+}
+/* 氛围层：上下压暗力度完全一致（纯色，不用渐变），保证整页亮度统一 */
+.intro::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: rgba(20, 14, 9, .34);
+  z-index: 1;
+  pointer-events: none;
+}
+.intro > * { position: relative; z-index: 2; }
+
+.intro-box {
+  background: var(--paper);
+  border-radius: 8px;
+  padding: 34px 40px 30px;
+  max-width: 560px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .8);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;                 /* 窄屏/矮屏时卡片内部滚动 */
+}
+/* 卡片等背景对完焦再浮上来（由 JS 在加载页收掉时给 .intro 加 .focus）；
+   没有 .focus 时保持默认可见，绝不因为动画 delay 卡在透明态 */
+.intro.focus .intro-box { animation: cardRise .95s cubic-bezier(.22, 1, .36, 1) 1.1s both; }
+@keyframes cardRise {
+  from { opacity: 0; transform: translateY(22px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+/* 窄屏/矮屏优先按动态视口高度算，避免移动端地址栏收起时卡片被切掉底部按钮 */
+@supports (height: 100dvh) {
+  .intro-box { max-height: calc(100dvh - 40px); }
+}
+.intro-box h2 {
+  font-family: var(--kai);
+  font-size: 28px;
+  text-align: center;
+  letter-spacing: 6px;
+  margin-bottom: 10px;
+}
+.intro-box .rule {
+  width: 56px; height: 2px;
+  background: var(--gold);
+  margin: 0 auto 18px;
+}
+.intro-box p {
+  font-family: var(--kai);
+  font-size: 14.5px; line-height: 1.95;
+  color: var(--ink-2);
+  margin-bottom: 14px;
+  text-align: justify;
+}
+/* 店名单独成行：第一屏需要一个"落点"，而不是一堵八行的文字墙 */
+.intro-line {
+  text-align: center !important;
+  font-size: 13px !important;
+  letter-spacing: 1px;
+  color: var(--ink) !important;
+  margin: 2px 0 14px !important;
+}
+.intro-tip { color: var(--red) !important; }
+.intro-tip .small { font-size: 12px; color: var(--ink-2); }
+
+/* ---------- 街景横条：第一屏唯一的图像锚点 ----------
+   卡片是牛皮纸，四周只有虚化的街景；没有这一条，整页就只剩"一块纸 + 八行楷体"。
+   压暗 0.9 让文字仍然最亮，sepia/contrast 与 .bg-layer 同一套滤镜语言，
+   免得两张同款照片看起来是两种调子。object-position 取图高 52%：
+   正好落在店铺门头与人行道之间，避开上方的天空和下方的路面。 */
+.intro-strip {
+  margin: 0 0 16px;
+  height: 128px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--paper-3);
+  box-shadow: inset 0 0 26px rgba(58, 44, 34, .28);
+}
+.intro-strip img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  object-position: center 52%;
+  display: block;
+  filter: sepia(.14) contrast(1.05) brightness(.9) saturate(.92);
+}
+
+/* ---------- 「为什么做这个」：手写批注感的分隔块 ---------- */
+.why {
+  margin: 22px 0 24px;
+  padding: 18px 20px 16px;
+  background: var(--paper-2);
+  border-radius: 6px;
+  border-left: 3px solid var(--red);
+  text-align: left;
+}
+.why-title {
+  margin: 0 0 12px;
+  font-family: var(--kai);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: var(--red);
+}
+.why p {
+  margin: 0 0 9px;
+  font-size: 13.5px;
+  line-height: 1.95;
+  color: var(--ink-2);
+  text-align: justify;
+}
+.why p:last-child { margin-bottom: 0; }
+/* 核心那句：加重、放大、招牌红 */
+.why .why-strong {
+  margin: 12px 0 10px;
+  padding: 8px 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--red);
+  text-align: center;
+  border-top: 1px dashed var(--paper-3);
+  border-bottom: 1px dashed var(--paper-3);
+}
+.why .why-tail { font-size: 12.5px; color: var(--dim); }
+
+/* 首句：作品的总论点 */
+.why .why-lead {
+  margin-bottom: 11px;
+  font-size: 14.5px;
+  font-weight: 700;
+  line-height: 1.85;
+  color: var(--ink);
+}
+/* 「城市的根，不止建筑」这句核心立意 */
+.why b { font-weight: 700; color: var(--red); }
+
+@media (max-width: 640px) {
+  .intro-box { padding: 24px 20px 22px; }
+  .why { padding: 13px 14px 12px; margin: 14px 0 16px; }
+  .why-title { font-size: 13px; letter-spacing: 2px; margin-bottom: 9px; }
+  .why p { font-size: 12px; line-height: 1.8; margin-bottom: 7px; }
+  .why .why-lead { font-size: 13px; }
+  .why .why-strong { font-size: 13.5px; margin: 10px 0 8px; padding: 6px 0; }
+  .why .why-tail { font-size: 11px; }
+  .intro-box h2 { font-size: 24px; margin-bottom: 8px; }
+  .keys { margin-bottom: 14px; }
+  /* 窄屏：横条压矮，把高度留给文案和按钮；店名行字号跟着收一档 */
+  .intro-strip { height: 84px; margin-bottom: 12px; }
+  .intro-line { font-size: 12px !important; letter-spacing: 0; }
+  .keys { gap: 4px; }
+  .keys span { padding: 4px 8px; }
+}
+
+/* 三步流程：编号 + 箭头，让它读起来是"步骤"而不是三个可点的标签 */
+.keys {
+  display: flex; justify-content: center; align-items: center;
+  flex-wrap: wrap; gap: 6px;
+  margin-bottom: 20px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.keys span {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--paper-2);
+  padding: 4px 11px;
+  border-radius: 4px;
+  border: 1px solid var(--paper-3);
+}
+.keys span::before {
+  content: counter(step);
+  counter-increment: step;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: var(--red);
+  color: var(--paper);
+  font-size: 9.5px; line-height: 13px;
+  text-align: center;
+  flex: 0 0 auto;
+}
+.keys { counter-reset: step; }
+/* 步骤之间的连接箭头（最后一个不加） */
+.keys span + span::after {
+  content: '›';
+  margin-left: 6px;
+  margin-right: -4px;
+  color: var(--paper-3);
+  font-size: 15px;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+/* 主按钮：全页最重要的一个可点目标，给它一点"要按"的呼吸感 + 掠过的高光 */
+.btn.go {
+  width: 100%;
+  padding: 13px;
+  font-size: 15px;
+  letter-spacing: 4px;
+  background-image: linear-gradient(100deg, transparent 38%, rgba(244, 236, 216, .22) 50%, transparent 62%);
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  background-position: 130% 0;                 /* 高光停在右侧画外 */
+  transition: background-position .7s ease, background-color .18s, color .18s;
+  animation: goGlow 3.8s ease-in-out infinite;
+}
+.btn.go:hover { background-position: -30% 0; }  /* 悬停时高光从左掠过 */
+@keyframes goGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201, 155, 95, 0); }
+  50%      { box-shadow: 0 0 18px 2px rgba(201, 155, 95, .45); }
+}
+
+/* 提示条放【顶部】而不是底部 ——
+   底部角色（水果店 96%、林姐 88.5%）的台词气泡正好在画面下方，
+   toast 放底部会直接压住它们（用户反馈过遮挡）。
+   顶部只有顶栏，且气泡都在人物头顶之上的中段区域，不会冲突。 */
+.toast {
+  position: fixed;
+  left: 50%; top: 72px;                /* 顶栏下方 */
+  transform: translateX(-50%) translateY(-80px);
+  background: var(--gold);
+  color: var(--ink);
+  padding: 11px 28px;
+  border-radius: 40px;
+  font-family: var(--kai);
+  font-size: 14px;
+  letter-spacing: 1px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .4);
+  z-index: 500;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .45s cubic-bezier(.22, 1, .36, 1), opacity .45s;
+}
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+/* =========================================================
+   确认对话框 —— 替代浏览器原生 confirm
+   牛皮纸卡片 + 墨色楷体 + 招牌红警示，与全站视觉统一
+   ========================================================= */
+.dlg-mask {
+  position: fixed; inset: 0;
+  z-index: 550;
+  display: grid; place-items: center;
+  padding: 30px 20px;
+  background: rgba(20, 14, 9, .72);
+  backdrop-filter: blur(4px);
+  opacity: 0; visibility: hidden;
+  transition: opacity .3s ease, visibility .3s;
+}
+.dlg-mask.show { opacity: 1; visibility: visible; }
+
+.dlg {
+  position: relative;
+  width: min(430px, 100%);
+  padding: 32px 34px 26px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+  transform: translateY(16px) scale(.97);
+  transition: transform .3s cubic-bezier(.22, 1, .36, 1);
+}
+.dlg-mask.show .dlg { transform: translateY(0) scale(1); }
+
+/* 顶部一道招牌红，像贴在纸上的封条 */
+.dlg::before {
+  content: '';
+  position: absolute;
+  top: -2px; left: -2px; right: -2px;
+  height: 5px;
+  background: var(--red);
+  border-radius: 6px 6px 0 0;
+}
+
+.dlg-title {
+  margin: 4px 0 12px;
+  font-family: var(--kai);
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--red);
+}
+.dlg-text {
+  margin: 0 0 22px;
+  font-family: var(--kai);
+  font-size: 15px;
+  line-height: 1.9;
+  color: var(--ink-2);
+  text-align: justify;
+}
+
+.dlg-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.dlg-actions .btn {
+  padding: 8px 20px;
+  font-size: 13.5px;
+  letter-spacing: 2px;
+  background: transparent;
+  color: var(--ink-2);
+  border: 1.5px solid var(--paper-3);
+}
+.dlg-actions .btn:hover { background: rgba(58, 44, 34, .07); color: var(--ink); border-color: var(--ink-2); }
+.dlg-actions .btn.primary {
+  background: var(--red);
+  color: var(--paper);
+  border: 1.5px solid var(--red);
+  font-weight: 700;
+}
+.dlg-actions .btn.primary:hover { background: var(--red-2); border-color: var(--red-2); color: #fff; }
+
+@media (max-width: 640px) {
+  .dlg { padding: 26px 22px 20px; }
+  .dlg-title { font-size: 18px; }
+  .dlg-text { font-size: 14px; }
+  .dlg-actions .btn { padding: 7px 16px; font-size: 12.5px; letter-spacing: 1px; }
+}
+
+/* =========================================================
+   移动端
+   ========================================================= */
+@media (max-width: 760px) {
+  .topbar { height: auto; padding: 8px 12px; gap: 10px; flex-wrap: wrap; }
+  .brand h1 { font-size: 17px; letter-spacing: 2px; }
+  .brand .sub { display: none; }
+  .progress-card { padding: 4px 11px 5px; gap: 7px; }
+  .progress-track { width: 50px; }
+  .btn { font-size: 11.5px; padding: 5px 9px; letter-spacing: 0; }
+  .speech-bubble { max-width: 200px; font-size: 12.5px; padding: 8px 11px; }
+  .speech-bubble { font-size: 12.5px; max-width: 190px; padding: 8px 11px; }
+  .card { padding: 20px 18px 18px; }
+  .avatar-box { width: 82px; height: 82px; }
+  .avatar-box img { width: 74px; height: 74%; }
+  .role-name { font-size: 21px; }
+  .role-quote { font-size: 15px; }
+  .stat-k { flex-basis: 52px; font-size: 12px; }
+  .panorama { padding: 24px 20px 26px; }
+  .panorama h2 { font-size: 21px; letter-spacing: 4px; }
+  .ava-cell .ring { width: 54px; height: 54px; }
+  .ava-cell .ring img { width: 92%; height: 92%; }
+}
+
+.rotate-hint { display: none; }
+@media (max-width: 760px) and (orientation: portrait) {
+  .rotate-hint {
+    display: block;
+    position: fixed;
+    left: 50%; bottom: 12px;
+    transform: translateX(-50%);
+    z-index: 550;
+    font-family: var(--kai);
+    font-size: 11.5px;
+    padding: 5px 12px;
+    color: var(--paper);
+    background: rgba(28, 20, 13, .88);
+    pointer-events: none;
+  }
+}
+
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: var(--panel); }
+::-webkit-scrollbar-thumb { background: var(--panel-3); border-radius: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
+/* =========================================================
+   第一屏：上中下三段，互不重叠
+     38% 题献（粒子聚成，唯一视觉主角）
+     54% 金线
+     62% 起 大标题 · 说明 · 按钮
+     底部一行小字提示
+   ★ 两条铁律：
+     ① 任何两段之间至少留 6vh，绝不允许叠字；
+     ② 起手必须"暗"——亮起来这件事只发生在用户点击之后。
+   ★ .loader 不能有 transition: opacity —— 粒子脚本逐帧写 opacity，
+     一旦有过渡就会拖着尾影；收场过渡由 app.js 关闭时临时加。
+   ========================================================= */
+.loader {
+  position: fixed; inset: 0;
+  z-index: 900;
+  background: #0e0a07;
+  overflow: hidden;
+  cursor: pointer;                 /* 整页可点击进入 */
+  --title-size: clamp(34px, 4.4vw, 52px);   /* 与 loader-fx.js 的 titlePx() 同公式（桌面端封顶 52px） */
+  --title-ls: .1em;                          /* 与 loader-fx.js 的 titleLs() 同值 */
+}
+
+/* 暖调晕影遮罩：中心透亮、四周自然收暗，叠一点暖棕与淡金，
+   保证文字清晰又不把老街背景压成黑框（垫在亮版底之上、粒子画布之下 z:1）。 */
+.loader::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 90% at 50% 40%,
+      rgba(38, 26, 16, 0)    0%,
+      rgba(38, 26, 16, .12) 46%,
+      rgba(34, 22, 13, .34) 78%,
+      rgba(28, 18, 10, .5)  100%),
+    linear-gradient(180deg, rgba(60, 42, 24, .16), rgba(40, 27, 15, .08) 40%, rgba(34, 22, 12, .22));
+}
+/* 暗版底：整场粒子戏都压在它上面。background-image 用 ../ 相对 css 目录解析；
+   尺寸与位置拆开写，别用简写（简写会把 size 一并覆盖成 auto）。 */
+.loader-bg {
+  position: absolute; inset: 0;
+  background-image: url("../assets/bg-street.jpg");
+  background-size: cover;
+  background-position: center;
+  filter: blur(22px) saturate(.45) brightness(.26);
+  transform: scale(1.26);                          /* 放大盖住模糊边缘 */
+  will-change: filter;
+}
+/* 亮版底：★ 初始几乎全黑，只有 .entering 时才对焦 —— 整屏只有一次"亮起来" */
+.loader-bg-top {
+  position: absolute; inset: 0;
+  z-index: 1;
+  background-image: url("../assets/bg-street.jpg");
+  background-size: cover;
+  background-position: center;
+  filter: blur(26px) saturate(.5) brightness(.2);
+  transform: scale(1.3);
+  opacity: 0;
+  will-change: filter, opacity, transform;
+}
+.loader.entering .loader-bg-top { animation: bgFocus 1.5s cubic-bezier(.3, 0, .2, 1) forwards; }
+@keyframes bgFocus {
+  0%   { opacity: .25; filter: blur(26px) saturate(.5) brightness(.2); transform: scale(1.3); }
+  100% { opacity: 1;   filter: blur(0)   saturate(.9) brightness(.92); transform: scale(1.06); }
+}
+.loader-fx {
+  position: absolute; inset: 0;
+  z-index: 2;
+  width: 100%; height: 100%;
+}
+
+/* ---- 段一：题献（粒子字形所在处，位置必须与 canvas 的 TITLE_Y_RATIO 一致）---- */
+.loader-dedicate {
+  position: absolute;
+  left: 50%; top: 38%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding-left: var(--title-ls);
+  /* ★ 衬线（宋体系）而不是楷体：粒子聚出来的字才有"标题"的分量。
+     注意：loader-fx.js 的 FONT_STACK 必须与这一行保持同一套字体。 */
+  font-family: "Source Han Serif SC", "Noto Serif SC", "Songti SC", "SimSun", "STSong", serif;
+  font-weight: 600;
+  font-size: var(--title-size);
+  letter-spacing: var(--title-ls);
+  white-space: nowrap;
+  color: #f7f0df;                /* 暖白 */
+  opacity: 0;                    /* 由 JS 逐帧写入，封顶 .42 */
+  text-shadow: 0 2px 26px rgba(0, 0, 0, .55), 0 0 34px rgba(233, 205, 152, .16);
+  pointer-events: none;
+}
+/* 窄屏 / 无动画：粒子跑不了时，这行字必须自己站住 */
+.loader.as-text .loader-dedicate { opacity: 1 !important; transition: opacity 1s ease .5s; }
+
+/* 题献下的英文小字：紧跟中文题献的正下方（间距 = 半个题献字号 + 固定呼吸），
+   透明度与中文题献走同一条 JS 曲线（见 loader-fx.js ⑥），整组题献一个亮度档。 */
+.loader-dedicate-en {
+  position: absolute;
+  left: 50%;
+  top: calc(38% + clamp(34px, 4.4vw, 52px) / 2 + 26px);
+  transform: translateX(-50%);
+  margin: 0;
+  font-family: Georgia, "Times New Roman", "Palatino Linotype", serif;
+  font-size: clamp(10px, 0.95vw, 12.5px);
+  font-weight: 400;
+  letter-spacing: .52em;
+  padding-left: .52em;             /* 抵消末字符尾距，让字面真正居中 */
+  white-space: nowrap;
+  color: rgba(214, 197, 164, .92); /* 浅金灰 */
+  opacity: 0;                      /* 由 JS 逐帧写入，封顶 .42（与中文一致） */
+  text-shadow: 0 1px 12px rgba(0, 0, 0, .6);
+  pointer-events: none;
+}
+.loader.as-text .loader-dedicate-en { opacity: 1 !important; transition: opacity 1s ease .5s; }
+
+/* ---- 段二：金线 + 大标题 + 说明 + 按钮（整块只在下半屏）----
+   ★ z-index:3 必须高于 .loader-fx 的 2：否则整块 canvas 盖在文案上，
+     按钮看得见却点不到（Playwright 报 "canvas intercepts pointer events"）。 */
+.loader-copy {
+  position: absolute;
+  left: 50%; top: 52%;            /* 文字区整体略上移，标题—正文—按钮更紧凑 */
+  transform: translateX(-50%);
+  width: min(760px, 86vw);
+  text-align: center;
+  pointer-events: none;           /* 未解锁前不吃点击 */
+  z-index: 3;
+}
+.loader.armed .loader-copy { pointer-events: auto; }
+
+.loader-rule {
+  width: 88px; height: 1.5px;
+  margin: 0 auto 20px;
+  background: linear-gradient(90deg, transparent, rgba(226, 194, 134, .8), transparent);
+  opacity: 0;
+}
+/* 次级标题「街角记忆」：约 19px，低饱和暖金，只做章节铭牌 */
+.loader-title {
+  margin: 0 0 16px;
+  font-family: "Source Han Serif SC", "Noto Serif SC", "Songti SC", "SimSun", "STSong", serif;
+  font-weight: 600;
+  font-size: clamp(16px, 1.5vw, 19px);
+  letter-spacing: .38em;
+  padding-left: .38em;
+  color: #c4a274;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, .6);
+  opacity: 0;
+}
+/* 介绍文字：14–15px、行高 1.9、限宽 430px，柔和米灰，字距克制 */
+.loader-tip {
+  margin: 0 auto 26px;
+  max-width: 430px;
+  font-family: var(--kai);
+  font-size: clamp(14px, 1.1vw, 15px);
+  line-height: 1.9;
+  letter-spacing: .04em;
+  color: #c9bfae;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, .7);
+  opacity: 0;
+}
+/* 入场按钮：与全站按钮同一套语言（深棕磨砂 + 暗金细边 + 楷体），
+   悬停时亮成暖金底墨字——即 .btn.primary 的姿态，全站一致 */
+.loader-enter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: min(200px, 78vw);
+  height: 52px;
+  padding: 0 22px;
+  padding-left: calc(22px + .3em);   /* 抵消字距尾隙，文字在按钮内真正居中 */
+  font-family: var(--kai);
+  font-size: 15px;
+  letter-spacing: .3em;
+  color: #d4c5b0;
+  background: rgba(58, 44, 34, .8);          /* 同 --panel-2 的磨砂深棕 */
+  border: 1px solid var(--panel-3);
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .3);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  cursor: pointer;
+  transition: background .18s, color .18s, border-color .18s;
+}
+.loader-enter .enter-arrow {
+  width: 1.05em; height: 1.05em; flex: none; margin-left: -.12em;
+  opacity: .8;
+  transition: transform .25s ease;
+}
+.loader-enter:hover {
+  background: var(--gold);                   /* 与 .btn.primary 同一姿态 */
+  color: var(--ink);
+  border-color: var(--gold);
+}
+.loader-enter:hover .enter-arrow { transform: translateX(3px); opacity: 1; }
+.loader-enter:active { filter: brightness(.94); }
+.loader-enter:focus-visible {
+  outline: 1px dotted rgba(201, 155, 95, .5);
+  outline-offset: 4px;
+}
+
+/* ★ 浮现总时长压到 1.2s 内：成形之后画面不再"自己动"太久 */
+.loader.armed .loader-rule  { animation: copyFade .5s ease .05s both; }
+.loader.armed .loader-title { animation: copyRise .7s cubic-bezier(.22, 1, .36, 1) .15s both; }
+.loader.armed .loader-tip   { animation: copyRise .7s cubic-bezier(.22, 1, .36, 1) .35s both; }
+.loader.armed .loader-enter { animation: copyRise .7s cubic-bezier(.22, 1, .36, 1) .75s both; }
+@keyframes copyRise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes copyFade { from { opacity: 0; } to { opacity: 1; } }
+
+/* 底部：小号向下箭头 + SCROLL TO EXPLORE（同样要高于 canvas，否则 hover/点击不可达） */
+.loader-skip {
+  position: absolute;
+  left: 50%; bottom: 5.2%;
+  transform: translateX(-50%);
+  margin: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 9.5px;
+  letter-spacing: .38em;
+  padding-left: .38em;
+  color: rgba(226, 214, 190, .48);
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.loader-skip .skip-arrow {
+  width: 12px; height: 12px;
+  flex: none;
+  color: rgba(226, 194, 134, .55);
+}
+.loader.armed .loader-skip {
+  animation: copyFade .8s ease 1.1s both, skipFloat 3.4s ease-in-out 2s infinite;
+}
+/* 缓慢轻柔的上下浮动：只动 4px，同时保留水平居中的 translateX */
+@keyframes skipFloat {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50%      { transform: translateX(-50%) translateY(-4px); }
+}
+
+/* 无障碍兜底：不做动效的机器上直接显示文字与背景，同样停在等点击 */
+@media (prefers-reduced-motion: reduce) {
+  .loader-fx { display: none; }
+  .loader-dedicate { opacity: 1; }
+  .loader-dedicate-en { opacity: 1; }
+  .loader-copy, .loader-rule, .loader-title, .loader-tip, .loader-enter, .loader-skip {
+    opacity: 1 !important; animation: none !important;
+  }
+  .loader-copy { pointer-events: auto; }
+  /* skip 依赖 translateX 居中，不能跟着归零 */
+  .loader-skip { transform: translateX(-50%) !important; }
+  .loader-bg { filter: blur(14px) saturate(.7) brightness(.62); }
+  .loader-bg-top { opacity: 1; filter: blur(0) saturate(.9) brightness(.92); transform: scale(1.06); }
+}
+/* 窄屏兜底 */
+@media (max-width: 760px) {
+  .loader { --title-size: clamp(26px, 7.6vw, 36px); --title-ls: .08em; }
+  .loader-copy { width: 88vw; top: 53%; }
+  .loader-title { font-size: clamp(14px, 4.4vw, 17px); margin-bottom: 12px; }
+  .loader-tip { max-width: min(430px, 84vw); margin-bottom: 22px; font-size: 13px; line-height: 1.85; }
+  .loader-rule { margin-bottom: 16px; }
+  .loader-skip { font-size: 8.5px; letter-spacing: .32em; }
+}
+/* 矮屏兜底：正文在矮视口（如 1280×720 笔记本）下再收一档，
+   保证按钮与底部「SCROLL TO EXPLORE」提示互不打架 */
+@media (max-height: 740px) {
+  .loader-tip { font-size: 13px; line-height: 1.78; margin-bottom: 18px; }
+  .loader-title { margin-bottom: 12px; }
+  .loader-rule { margin-bottom: 14px; }
+}
+
+/* =========================================================
+   右下角「关于」按钮 + 关于弹窗
+   ========================================================= */
+.about-btn {
+  position: fixed; right: 18px; bottom: 16px;
+  z-index: 620;
+  font-family: var(--kai);
+  font-size: 12.5px;
+  letter-spacing: 3px;
+  color: var(--paper);
+  background: rgba(26, 18, 13, .55);
+  border: 1px solid var(--bar-line);
+  border-radius: 999px;
+  padding: 8px 15px 8px 18px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: background .2s, border-color .2s, transform .2s;
+}
+/* 街道阶段「关于」抬高到底 60px：1280 宽度下右下角正好压着王姐的呼吸灯
+   （fixed 按钮的几何不随街景平移），不抬高会把灯的点击整个吃掉。
+   结局页（html.finale-on，由 app.js 在 show/hide 时切换）回落到 16px，
+   与「回看街道」(bottom:60) 保持上下排列 —— 布局在结局页不与灯冲突。 */
+html:not(.finale-on) .about-btn { bottom: 60px; }
+.about-btn:hover {
+  background: var(--red);
+  border-color: var(--red);
+  transform: translateY(-1px);
+}
+
+.about-panel {
+  position: fixed; inset: 0;
+  z-index: 650;
+  display: grid; place-items: center;
+  padding: 32px 20px;
+  /* 与故事弹层同一套语言：背景图的模糊状态，不压死黑 */
+  background: rgba(46, 34, 24, .28);
+  backdrop-filter: blur(16px) saturate(.85) brightness(.96);
+  -webkit-backdrop-filter: blur(16px) saturate(.85) brightness(.96);
+  opacity: 0; visibility: hidden;
+  transition: opacity .34s ease, visibility .34s;
+}
+.about-panel.show { opacity: 1; visibility: visible; }
+
+.about-card {
+  position: relative;
+  width: min(660px, 100%);
+  max-height: 82vh;
+  overflow: auto;
+  padding: 36px 42px 38px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .5);
+  transform: translateY(18px) scale(.98);
+  transition: transform .32s cubic-bezier(.22, 1, .36, 1);
+}
+.about-panel.show .about-card { transform: translateY(0) scale(1); }
+
+/* 重点句：复古印泥红棕 + 加粗，在牛皮纸底上像一枚钤印，不刺眼 */
+.about-key { font-weight: 700; color: #96452a; }
+
+.about-close {
+  position: absolute; top: 12px; right: 14px;
+  width: 32px; height: 32px;
+  font-size: 22px; line-height: 1;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1.5px solid var(--paper-3);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background .2s, color .2s, border-color .2s;
+}
+.about-close:hover { background: var(--red); color: var(--paper); border-color: var(--red); }
+
+.about-card h3 {
+  margin: 0 0 6px;
+  font-family: var(--kai);
+  font-size: 23px;
+  letter-spacing: 2px;
+  color: var(--red);
+}
+.about-sub {
+  margin: 0 0 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--paper-3);
+  font-size: 12px;
+  color: var(--ink-faint);
+  letter-spacing: 3px;
+}
+.about-body {
+  font-family: var(--kai);
+  font-size: 14.5px;
+  line-height: 2.05;
+  color: var(--ink-2);
+  text-align: justify;
+}
+.about-body p { margin: 0 0 13px; }
+.about-body .about-tail {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--paper-3);
+  text-align: center;
+  color: var(--ink-faint);
+  letter-spacing: 1px;
+}
+@media (max-width: 640px) {
+  .about-card { padding: 28px 22px 30px; }
+  .about-card h3 { font-size: 19px; }
+  .about-body { font-size: 13.5px; line-height: 1.95; }
+  .about-btn { right: 12px; bottom: 12px; }
+  /* 街道阶段同样抬高一档，避开王姐的呼吸灯（结局页仍走上面的 12px 叠放） */
+  html:not(.finale-on) .about-btn { bottom: 54px; }
+  /* 结局页的「回看街道」跟着「关于」一起挪，保持右下角上下对齐 */
+  .finale > .finale-actions { right: 12px; bottom: 54px; }
+}
+
+/* =========================================================
+   街道底部细字副标题 —— 2026-10 晚应要求移除（元素与样式一并删净）
+   ========================================================= */
+
+/* =========================================================
+   悬浮 HUD（替代原深色导航栏）
+   参考：左侧小纸签工具钮 / 居中品牌字 / 右上小徽章进度
+   ========================================================= */
+.hud {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 60;
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 14px 18px 0;
+  pointer-events: none;           /* 整条不挡街景点击 */
+}
+.hud > * { pointer-events: none; }
+.hud .hud-left, .hud .hud-right { pointer-events: auto; }
+
+.hud-left { display: flex; gap: 10px; }
+/* 左上角两个「符号钮」（2026-10 定案）
+   ---------------------------------------------------------
+   应要求：不再出现任何文字，改用两枚内联 SVG 符号代表功能
+   （♪ 音乐 / ↺ 重走），并统一成半透明磨砂圆钮 ——
+   与结局页箭头、右下「关于」同一套暗金 + 毛玻璃语言：
+   落在黄昏街景上轻盈、不抢戏，同时仍然一眼能认出是「可点的控件」。
+   （原「老招牌纸签」样式的 .hud-pill 已整体删除：全站不再有文字钮。） */
+.hud-icon-btn {
+  position: relative;
+  width: 42px; height: 42px;
+  display: grid; place-items: center;
+  padding: 0;
+  color: #f6e4b6;                        /* 暖金，与放大镜 / 标题同一族 */
+  background: rgba(26, 18, 13, .40);
+  border: 1.4px solid rgba(201, 155, 95, .55);
+  border-radius: 50%;
+  backdrop-filter: blur(7px) saturate(.9);
+  -webkit-backdrop-filter: blur(7px) saturate(.9);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+  cursor: pointer;
+  transition: background .2s, border-color .2s, color .2s, transform .2s, box-shadow .2s;
+}
+.hud-icon-btn svg { width: 20px; height: 20px; display: block; }
+.hud-icon-btn:hover {
+  background: rgba(168, 68, 47, .88);    /* 悬停染招牌红，与全站 hover 语言一致 */
+  border-color: var(--red);
+  color: var(--paper);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .45);
+}
+.hud-icon-btn:active { transform: translateY(0) scale(.95); }
+
+.hud-brand {
+  position: absolute;
+  left: 50%; top: 10px;
+  transform: translateX(-50%);
+  font-family: var(--kai);
+  font-weight: 700;
+  font-size: clamp(22px, 3.2vw, 30px);
+  letter-spacing: 10px;
+  color: #f5dfa9;                       /* 亮金：在黄昏街景上足够跳 */
+  padding: 7px 28px 9px;
+  background: linear-gradient(180deg, rgba(26, 18, 13, .62), rgba(26, 18, 13, .38));
+  border: 1px solid rgba(201, 155, 95, .45);
+  border-radius: 999px;
+  backdrop-filter: blur(8px) brightness(.9);
+  -webkit-backdrop-filter: blur(8px) brightness(.9);
+  text-shadow:
+    0 0 1px rgba(26, 18, 13, .9),
+    0 2px 4px rgba(26, 18, 13, .95),
+    0 0 26px rgba(201, 155, 95, .5);
+  white-space: nowrap;
+}
+
+.hud-right { margin-right: 64px; }   /* 给右下角「关于」按钮让位视觉重心 */
+.hud-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: rgba(26, 18, 13, .72);
+  border: 1.5px solid var(--gold);
+  border-radius: 6px;
+  padding: 5px 12px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .4);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.hud-mono {
+  font-style: normal;
+  font-family: var(--kai);
+  font-size: 13px;
+  color: var(--paper);
+  background: var(--red);
+  border-radius: 3px;
+  padding: 1px 6px;
+  letter-spacing: 0;
+}
+.hud-badge .progress-count { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--gold); }
+.hud-track {
+  width: 46px; height: 5px;
+  background: rgba(201, 155, 95, .25);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.hud-track .progress-fill {
+  display: block; height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--gold), #e0b878);
+  transition: width .7s cubic-bezier(.22, 1, .36, 1);
+}
+@media (max-width: 640px) {
+  .hud { padding: 10px 10px 0; }
+  .hud-icon-btn { width: 38px; height: 38px; }
+  .hud-icon-btn svg { width: 18px; height: 18px; }
+  .hud-left { gap: 8px; }
+  .hud-brand { top: 9px; font-size: 17px; letter-spacing: 5px; padding: 6px 18px 7px; }
+  .hud-right { margin-right: 4px; }
+}
+
+/* =========================================================
+   树干上的麻雀
+   锚点 = 脚底（背景图坐标，layout() 里换算），1em = 鸟身高，
+   蹦跳全程用 em 位移，任何窗口尺寸下都等比缩放。
+   ========================================================= */
+.sparrow {
+  position: absolute;
+  width: 1.5em;
+  height: 1.35em;
+  margin-left: -.75em;      /* 水平居中锚点 */
+  margin-top: -1.32em;      /* 锚点贴脚底 */
+  z-index: 6;               /* 树干之上、人物之下 */
+  pointer-events: none;
+}
+.sparrow-svg {
+  display: block;
+  width: 100%; height: 100%;
+  filter: sepia(.14) saturate(.92) drop-shadow(0 .06em .07em rgba(40, 28, 16, .42));
+  animation: sparrowHop 18s ease-in-out infinite;
+  transform-origin: 50% 100%;   /* 啄食/理毛绕脚底转 */
+}
+/* 脚下一小片软影子：腾空时变淡 */
+.sparrow-shadow {
+  position: absolute;
+  left: 12%; right: 12%; bottom: -.09em;
+  height: .16em;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(28, 20, 12, .38) 0%, rgba(28, 20, 12, 0) 74%);
+  animation: sparrowShadow 18s ease-in-out infinite;
+}
+
+/* 蹦跳编排（18s 一轮）：沿树干斜率向上三跳（右上方粗干，dx≈+.76em / dy≈-1.12em 每跳）
+   → 每站啄食/理毛 → 再三跳折返 → 长歇。
+   上行时翻身面朝右（scaleX(-1)，麻雀不倒着跳），下行翻回面朝左；
+   翻身段内的 rotate 已按镜像取反，保证啄食始终朝下。 */
+@keyframes sparrowHop {
+  0%, 5%        { transform: translate(0, 0) scaleX(1) rotate(0); }
+  5.8%          { transform: translate(0, 0) scaleX(-1) rotate(0); }        /* 转身朝右 */
+  6.75%         { transform: translate(.38em, -.91em) scaleX(-1) rotate(4deg); }
+  8.5%, 12%     { transform: translate(.76em, -1.12em) scaleX(-1) rotate(0); }
+  13.75%        { transform: translate(1.14em, -2.04em) scaleX(-1) rotate(4deg); }
+  15.5%         { transform: translate(1.52em, -2.25em) scaleX(-1) rotate(0); }
+  17%           { transform: translate(1.52em, -2.25em) scaleX(-1) rotate(0); }
+  18.5%         { transform: translate(1.52em, -2.17em) scaleX(-1) rotate(-26deg); }  /* 啄树皮 */
+  20%           { transform: translate(1.52em, -2.25em) scaleX(-1) rotate(0); }
+  21.75%        { transform: translate(1.90em, -3.16em) scaleX(-1) rotate(4deg); }
+  23.5%         { transform: translate(2.27em, -3.37em) scaleX(-1) rotate(0); }
+  26%           { transform: translate(2.27em, -3.37em) scaleX(-1) rotate(0); }
+  27.5%         { transform: translate(2.27em, -3.29em) scaleX(-1) rotate(-24deg); }
+  29%           { transform: translate(2.27em, -3.37em) scaleX(-1) rotate(0); }
+  30.5%         { transform: translate(2.27em, -3.33em) scaleX(-1) rotate(11deg); }   /* 理毛 */
+  32%           { transform: translate(2.27em, -3.37em) scaleX(-1) rotate(0); }
+  33%           { transform: translate(2.27em, -3.37em) scaleX(1) rotate(0); }        /* 转回朝左 */
+  34%           { transform: translate(1.90em, -2.81em) scaleX(1) rotate(3deg); }
+  36%           { transform: translate(1.52em, -2.25em) scaleX(1) rotate(0); }
+  38.5%         { transform: translate(1.14em, -1.69em) scaleX(1) rotate(3deg); }
+  40.5%         { transform: translate(.76em, -1.12em) scaleX(1) rotate(0); }
+  42.5%         { transform: translate(.38em, -.56em) scaleX(1) rotate(3deg); }
+  44.5%         { transform: translate(0, 0) scaleX(1) rotate(0); }
+  70%           { transform: translate(0, 0) scaleX(1) rotate(0); }
+  71.5%         { transform: translate(0, -.05em) scaleX(1) rotate(22deg); }
+  73%           { transform: translate(0, 0) scaleX(1) rotate(0); }
+  86%           { transform: translate(0, 0) scaleX(1) rotate(0); }
+  87.5%         { transform: translate(.06em, -.04em) scaleX(1) rotate(-9deg); }
+  89%, 100%     { transform: translate(0, 0) scaleX(1) rotate(0); }
+}
+@keyframes sparrowShadow {
+  0%, 5%        { opacity: 1; transform: scaleX(1); }
+  6.75%         { opacity: .45; transform: scaleX(.8); }
+  8.5%, 12%     { opacity: 1; transform: scaleX(1); }
+  13.75%        { opacity: .45; transform: scaleX(.8); }
+  15.5%, 20%    { opacity: 1; transform: scaleX(1); }
+  21.75%        { opacity: .45; transform: scaleX(.8); }
+  23.5%, 32%    { opacity: 1; transform: scaleX(1); }
+  34%           { opacity: .45; transform: scaleX(.8); }
+  36%           { opacity: 1; transform: scaleX(1); }
+  38.5%         { opacity: .45; transform: scaleX(.8); }
+  40.5%         { opacity: 1; transform: scaleX(1); }
+  42.5%         { opacity: .45; transform: scaleX(.8); }
+  44.5%, 100%   { opacity: 1; transform: scaleX(1); }
+}
+
+/* =========================================================
+   总结页 · 环形转盘（街道生态全景）
+   鼠标横向移动带动圆盘 ±28° 摆动；人物沿圆周分布、永远保持正立
+   ========================================================= */
+/* =========================================================
+   总结页 · 沉浸式环形转盘（街道生态全景）
+   去掉白色纸框：标题/提示悬浮，人物直接立在虚化街景上；
+   左右箭头点击旋转（每次 1/6 圈），transition 自带阻尼感
+   ========================================================= */
+.finale { gap: 6px; }
+.finale-title {
+  position: relative;
+  z-index: 2;
+  margin: 0;
+  /* 宋体（碑刻感），和开场页的楷体卡片标题拉开层级：这是「全景标题」不是「卡片标题」 */
+  font-family: "Songti SC", "SimSun", "Source Han Serif SC", "Noto Serif SC", "STSong", serif;
+  font-weight: 700;
+  font-size: clamp(28px, 4.2vw, 42px);
+  letter-spacing: 16px;
+  color: #f6efe0;
+  /* 双层阴影：近处墨色压边（从虚化街景里抠出字），远处暖金描一层灯牌感 */
+  text-shadow:
+    0 2px 6px rgba(20, 12, 6, .85),
+    0 3px 14px rgba(0, 0, 0, .7),
+    0 0 34px rgba(201, 155, 95, .38);
+  animation: pop .8s .35s both;
+}
+.turntable-container {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 1200px;
+  min-height: 300px;
+  margin: 0;
+  /* 2.5D：不用 CSS 3D 透视，位置/缩放/层级全部由 JS 三角函数计算 */
+}
+/* 地面轨道：极细实线 + 两端消散遮罩，微微下压模拟「贴在地上」，
+   若隐若现不抢人物的戏 */
+.turntable-container::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: min(780px, 92vw);
+  height: min(780px, 92vw);
+  transform: translate(-50%, calc(-50% + 46px)) scaleY(.32);
+  border: 1px solid rgba(244, 236, 216, .16);
+  border-radius: 50%;
+  -webkit-mask-image: radial-gradient(circle, transparent 30%, #000 75%, transparent 98%);
+  mask-image: radial-gradient(circle, transparent 30%, #000 75%, transparent 98%);
+  pointer-events: none;
+}
+.turntable {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 0; height: 0;
+  /* 不加任何 transform：每个人物的位置由 JS 逐帧写入 */
+}
+/* 人物锚点（0×0 的圆心点），JS 写入 translate + scale；
+   图片本身绝不旋转，永不被压扁；transition 让每次切换平滑滑动 */
+.character {
+  position: absolute;
+  top: 0; left: 0;
+  cursor: pointer;
+  will-change: transform, opacity;
+  /* 默认半透明（--o 由 JS 按档位写入：越靠后越淡）——
+     鼠标靠近前人物是「虚」的，靠近（悬停）时才被点亮到 1。
+     ★ 用变量而不是内联 opacity：内联样式优先级高于 :hover，
+       会让「悬停点亮」永远失效。 */
+  opacity: var(--o, 1);
+  /* ★ 必须显式指定 transform-origin: 0 0 ——
+     .character 是 shrink-to-fit 盒子（宽度=立绘宽度，各人不同），
+     默认的 transform-origin: 50% 50% 会让每个人【绕自己的盒子中心】缩放，
+     而不是绕六个人共享的那个锚点。
+     后果实测（1920）：skewer 档 3 的 translate x=0（本该正好落在中心 960），
+     实际 imgCx=990，整整偏了半个身位 —— 偏移量正好是 (1-s)·w/2 = 0.5×61/2。
+     因为 front 档 s=1 时偏移为 0，所以「正前方永远居中」这条看不出问题，
+     一旦出现 tx=0 且 s≠1 的档位（就是「正后方那位」）就暴露了。
+     绕锚点缩放后，实测六人 imgCx 与 tx 严格对齐。 */
+  transform-origin: 0 0;
+  transition: transform .6s cubic-bezier(.25, 1, .5, 1), opacity .6s ease;
+}
+/* 脚底影子：让人物「站」在轨道上，随缩放同步变大变小 */
+.character::before {
+  content: '';
+  position: absolute;
+  left: -46px;
+  top: 84px;
+  width: 92px;
+  height: 20px;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, .5) 0%, transparent 70%);
+  border-radius: 50%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.avatar-wrap {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center;
+  transform: translate(-50%, -50%);   /* 以锚点为中心 */
+}
+/* ★ 原来 .ring 是 172×172 的正方形 + object-fit:contain，
+   于是「宽扁的立绘被高限制、细长的立绘被宽限制」——
+   六张画布的宽高比从 0.378(barber) 到 0.807(fruit) 差 2.1 倍，
+   同一个 scale 下渲染高度能差 2.3 倍（实测 skewer 126px vs barber 285px），
+   于是出现"两边大、中间小"的错觉。
+   改成【固定高度、宽度自适应】：高度由 JS 写入 --ring-h（自动反解，绝不手抄），
+   宽高比的差异因此不再影响渲染高度。 */
+.character .ring {
+  height: var(--ring-h, 178px);
+  width: auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  /* 去掉白色圆底：人物立绘直接立在虚化街景上，只用投影与地面分离 */
+  background: transparent;
+  border: none;
+  filter: drop-shadow(0 14px 20px rgba(0, 0, 0, .5));
+  transition: transform .3s cubic-bezier(.175, .885, .32, 1.275), filter .3s;
+}
+.character .ring img {
+  height: 100%;
+  width: auto;                /* 宽度跟着立绘比例走，高度统一 */
+  max-width: 300px;           /* 防止极宽的立绘把相邻的人挤开 */
+  object-fit: contain;
+  object-position: bottom center;   /* 脚底对齐轨道 */
+  display: block;
+}
+/* 正前方那一位多一点存在感（配合 JS 里 scale=1.0） */
+.character.front .ring img {
+  filter: drop-shadow(0 0 26px rgba(226, 190, 126, .45));
+}
+/* 悬停 / 键盘聚焦：点亮到全不透明 + 微微放大 + 暖光轮廓
+   （「靠近前是虚的、靠近后被点亮」的这一半由这里给出） */
+.character:hover,
+.character:focus-visible { opacity: 1; }
+.character:hover .ring,
+.character:focus-visible .ring {
+  transform: scale(1.08);
+  filter: drop-shadow(0 18px 26px rgba(0, 0, 0, .55))
+          drop-shadow(0 0 18px rgba(201, 155, 95, .45));
+}
+.character:focus-visible { outline: none; }
+
+/* 姓名 / 提示签：默认隐藏，悬停「被点亮」后浮现 —— 这就是那个「透明提示框」，
+   上面写名字、下面一句「点击观看故事」，把下一步动作说清楚。
+   ★ 用半透明磨砂而不是实心黑：它要像从暖光里浮出来的一层薄雾，不能盖住人物。 */
+.name-tag {
+  position: absolute;
+  top: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  background: rgba(26, 18, 13, .58);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  color: var(--paper);
+  font-family: var(--kai);
+  white-space: nowrap;
+  text-align: center;
+  padding: 5px 12px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(201, 155, 95, .5);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .28s ease, transform .28s ease, visibility .28s;
+  z-index: 5;
+}
+.name-tag b { display: block; font-size: 12.5px; font-weight: 700; letter-spacing: 1.5px; }
+.name-tag i {
+  display: block; margin-top: 3px;
+  font-style: normal; font-size: 10.5px; letter-spacing: 1px;
+  color: #f2d79c; opacity: .92;
+}
+.character:hover .name-tag,
+.character:focus-visible .name-tag {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ---------- 左右箭头：磨砂墨圆钮，贴屏幕两侧 ---------- */
+.arrow-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 54px; height: 54px;
+  border-radius: 50%;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--paper);
+  background: rgba(26, 18, 13, .55);
+  border: 1.5px solid rgba(201, 155, 95, .55);
+  cursor: pointer;
+  z-index: 200;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .4);
+  transition: background .2s, border-color .2s, transform .2s;
+}
+.arrow-btn:hover {
+  background: var(--red);
+  border-color: var(--red);
+  transform: translateY(-50%) scale(1.1);
+}
+.arrow-btn:active { transform: translateY(-50%) scale(.94); }
+.arrow-btn.prev { left: max(2vw, 10px); }
+.arrow-btn.next { right: max(2vw, 10px); }
+
+/* ---------- 提示条：暗底浮字（原来深色文字是为白卡设计的） ---------- */
+.finale .finale-hint {
+  position: relative;
+  z-index: 2;
+  color: var(--paper);
+  background: rgba(26, 18, 13, .55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-color: rgba(201, 155, 95, .55);
+}
+
+@media (max-width: 640px) {
+  .finale-title { letter-spacing: 8px; }
+  /* 注意：这里【不再】覆写 .ring 的宽高 ——
+     窄屏立绘尺寸由 JS 的 --ring-h 自动反解（连同 rx 一起算），
+     任何 CSS 固定值都会把 JS 的解算结果盖掉、导致重新出现大小不一。 */
+  .name-tag { font-size: 11px; padding: 3px 8px; }
+  .arrow-btn { width: 44px; height: 44px; font-size: 16px; }
+}
+/* 窄屏：三位方案下左右两侧本来就空着，把箭头挪到容器【外面】去，
+   人物就能吃满整条可视宽度（否则中心到箭头内缘只剩 ~110px，
+   三个人被挤成一小团）。JS 会给容器加 .narrow 并据此重算 arrowRoom。 */
+.turntable-container.narrow .arrow-btn.prev { left: -52px; }
+.turntable-container.narrow .arrow-btn.next { right: -52px; }
+/* 窄屏提示条：不收窄字号的话会折成三行、纵向撑开压到下方按钮。
+   ★ 另外：右下角现在固定着「回看街道 / 关于」两枚按钮，
+     提示条若照旧居中横伸，会一直伸到它们底下（实测 414×896 两者重叠）。
+     窄屏把提示条整体左移，右侧留出按钮的宽度，两者各归各位。 */
+@media (max-width: 640px) {
+  .finale-hint {
+    font-size: 11px; line-height: 1.5; padding: 7px 10px;
+    max-width: calc(100% - 116px);
+    margin-left: 0;
+    margin-right: 116px;
+  }
+  .finale-hint b { font-weight: 600; }
+}
+
+/* =========================================================
+   档案式详情弹窗（转盘点击人物触发）
+   等宽字体 + 网格底 + 数据条：实验室档案感，配牛皮纸/墨色体系
+   ========================================================= */
+.detail-overlay {
+  position: fixed; inset: 0;
+  z-index: 470;
+  display: flex; align-items: center; justify-content: center;
+  padding: 28px 20px;
+  background: rgba(46, 34, 24, .42);
+  backdrop-filter: blur(14px) saturate(.85);
+  -webkit-backdrop-filter: blur(14px) saturate(.85);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .35s ease, visibility .35s;
+}
+.detail-overlay.active { opacity: 1; visibility: visible; pointer-events: auto; }
+
+.detail-panel {
+  display: flex;
+  width: min(1000px, 94vw);
+  height: min(600px, 82vh);
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  box-shadow: 14px 14px 0 rgba(26, 18, 13, .18), 0 30px 70px rgba(0, 0, 0, .45);
+  position: relative;
+  overflow: hidden;
+  transform: translateY(16px) scale(.98);
+  transition: transform .35s cubic-bezier(.22, 1, .36, 1);
+}
+.detail-overlay.active .detail-panel { transform: none; }
+
+.detail-close {
+  position: absolute; top: 14px; right: 16px;
+  z-index: 10;
+  width: 34px; height: 34px;
+  font-size: 24px; line-height: 1;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1.5px solid var(--paper-3);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background .2s, color .2s, border-color .2s;
+}
+.detail-close:hover { background: var(--red); color: var(--paper); border-color: var(--red); }
+
+/* ---------- 左侧：数据档案区 ---------- */
+.data-side {
+  flex: 1 1 46%;
+  padding: 32px 30px 26px;
+  border-right: 2px dashed var(--paper-3);
+  display: flex; flex-direction: column; gap: 16px;
+  overflow-y: auto;
+  min-width: 0;
+}
+.header-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--red);
+  border-bottom: 1px solid var(--paper-3);
+  padding-bottom: 10px;
+}
+.species-name {
+  margin: 0;
+  font-family: var(--kai);
+  font-size: clamp(24px, 3.2vw, 34px);
+  letter-spacing: 3px;
+  color: var(--ink);
+  line-height: 1.3;
+}
+.sub-label {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--ink-faint, #8c7765);
+}
+.sequence-box {
+  background: #fbf6ea;
+  border: 1px solid var(--paper-3);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+.sequence-title {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 2.5px;
+  color: var(--ink-faint, #8c7765);
+  margin-bottom: 8px;
+}
+.sequence-rows {
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 2;
+  color: var(--ink-2);
+  letter-spacing: 1px;
+}
+.sequence-rows .highlight {
+  background: var(--ink);
+  color: var(--paper);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.metric-bars { display: flex; flex-direction: column; gap: 11px; margin-top: 2px; }
+.metric-item {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--kai);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.metric-k { flex: 0 0 64px; letter-spacing: 1px; text-align: justify; text-align-last: justify; }
+.metric-item .bar {
+  flex: 1;
+  height: 9px;
+  background: #e9dcc2;
+  border-radius: 5px;
+  overflow: hidden;
+}
+.metric-item .fill {
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--green-2, #2f4a3f), var(--green, #4a6b56));
+  transition: width .8s cubic-bezier(.22, 1, .36, 1);
+}
+.metric-item .fill.neg { background: linear-gradient(90deg, #6e332a, var(--red-2)); }
+.metric-v { flex: 0 0 38px; font-family: var(--mono); font-size: 12px; color: var(--ink-2); text-align: right; }
+
+/* ---------- 右侧：人物展示区 ---------- */
+.visual-side {
+  flex: 1 1 54%;
+  position: relative;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  overflow: hidden;
+  padding: 26px;
+}
+/* 实验室网格底：淡墨细线 */
+.grid-bg {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(58, 44, 34, .06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(58, 44, 34, .06) 1px, transparent 1px);
+  background-size: 22px 22px;
+  pointer-events: none;
+}
+.detail-avatar {
+  position: relative;
+  z-index: 2;
+  width: min(300px, 46%);
+  max-height: 58%;
+  object-fit: contain;
+  object-position: bottom center;
+  filter: drop-shadow(0 18px 26px rgba(40, 28, 16, .28));
+}
+.character-story {
+  position: relative;
+  z-index: 2;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--kai);
+  font-size: 14.5px;
+  line-height: 1.9;
+  letter-spacing: .5px;
+  text-align: center;
+  padding: 14px 24px;
+  margin-top: 22px;
+  max-width: 86%;
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .25);
+}
+
+@media (max-width: 760px) {
+  .detail-panel { flex-direction: column; height: min(760px, 88vh); }
+  .data-side { border-right: none; border-bottom: 2px dashed var(--paper-3); padding: 22px 20px 18px; }
+  .visual-side { padding: 18px; }
+  .detail-avatar { width: auto; height: 46%; }
+}
+
+/* =========================================================
+   故事卡的藤蔓装饰
+   背景藤蔓在卡片后生长，前景藤蔓压在卡片边角（缠绕感），
+   各自以不同周期随风摆动，形成视差。
+   ========================================================= */
+.story-panel .story-card { z-index: 2; }   /* 卡片浮在背景藤蔓之上 */
+.vine {
+  position: absolute;
+  pointer-events: none;   /* 不挡文字点击 */
+  /* 关键：以根部（右上角）为轴心摆动，像长在卡片边缘，而不是风车乱转 */
+  transform-origin: top right;
+}
+/* 背景藤蔓：左上角探出。
+   注意 与卡片顶边的关系：卡片顶部现在是【街景横条】，藤蔓若跨过卡片顶边过多，
+   叶子就会压在照片上、糊掉店招。这里把它整体上移，只让左上角一点点探出卡面。 */
+.vine-back {
+  width: 360px; height: 360px;
+  /* 卡片加宽到 760 后，藤蔓跟着外扩，保持「探出卡片左上角」的缠绕关系 */
+  left: calc(50% - 512px);
+  top: calc(50% - 330px);
+  opacity: .8;
+  z-index: 1;
+  animation: sway-back 9s ease-in-out infinite alternate;
+}
+/* 前景藤蔓：右上角压住卡片边角，并在卡面投下阴影。
+   同样上移，只压住卡片最右上的一角，不横穿横条照片。 */
+.vine-front {
+  width: 230px; height: 230px;
+  /* 前景藤蔓压在卡片右上角：卡片右缘在 50%+380，这里 250 起 → 探进卡片约 130px */
+  left: calc(50% + 250px);
+  top: calc(50% - 330px);
+  filter: drop-shadow(2px 5px 6px rgba(0, 0, 0, .35));
+  z-index: 3;
+  animation: sway-front 7s ease-in-out infinite alternate-reverse;
+}
+/* 小幅慢速摇摆：自然微风感，幅度收敛不抢戏 */
+@keyframes sway-back {
+  0%   { transform: rotate(-3deg) scale(1); }
+  100% { transform: rotate(6deg) scale(1.02); }
+}
+@keyframes sway-front {
+  0%   { transform: rotate(-7deg) scale(1); }
+  100% { transform: rotate(5deg) scale(1.03) translate(-4px, 2px); }
+}
+@media (max-width: 760px) {
+  /* 窄屏：卡片几乎占满宽度，藤蔓必须整体下移让开卡片顶部的横条与标题，
+     否则叶子会横穿标题（实测 414 宽时正好压在"街 角 记 忆"上）。
+     前景藤蔓在窄屏没有合法落点（卡片左右已贴边），直接隐藏，画面更干净。 */
+  .vine-back { width: 220px; height: 220px; left: calc(50% - 244px); top: calc(50% - 166px); opacity: .6; }
+  .vine-front { display: none; }
+}
+
+/* 开场页藤蔓：.intro > * 的相对定位会盖掉 .vine 的绝对定位，这里拉回 */
+.intro > .vine { position: absolute; z-index: 2; }
+
+/* 转盘最前方的角色：脚下轨道微微亮起 + 暖光环 */
+.character.front::before {
+  width: 110px;
+  background: radial-gradient(ellipse at center, rgba(201, 155, 95, .55) 0%, rgba(201, 155, 95, .18) 45%, transparent 72%);
+}
+.character.front .ring {
+  filter: drop-shadow(0 14px 20px rgba(0, 0, 0, .5))
+          drop-shadow(0 0 16px rgba(201, 155, 95, .35));
+}
+
+/* 总结页底部按钮：半透明墨底 + 毛玻璃，和整体 UI 统一 */
+/* 「回看街道」与「关 于」统一成同一枚复古胶囊钮：
+   字号 / 字距 / 内边距 / 描边 / 圆角全部对齐 .about-btn（左 18 右 15 抵消末字尾距） */
+.finale-actions .btn {
+  font-family: var(--kai);
+  font-size: 12.5px;
+  letter-spacing: 3px;
+  color: var(--paper);
+  background: rgba(26, 18, 13, .55);
+  border: 1px solid var(--bar-line);
+  border-radius: 999px;
+  padding: 8px 15px 8px 18px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: background .2s, border-color .2s, transform .2s;
+}
+.finale-actions .btn:hover {
+  background: var(--red);
+  border-color: var(--red);
+  transform: translateY(-1px);
+}
+
+/* 矮屏适配：防止标题被裁切 */
+@media (max-height: 720px) {
+  .finale { padding: 12px 24px; gap: 2px; }
+  .finale-title { font-size: 24px; letter-spacing: 10px; }
+  .turntable-container { min-height: 230px; }
+}
+
+/* =========================================================
+   树冠上摇曳的梧桐叶
+   ★ 结构：必须挂在 .bg-layer 内（app.js 会把 #leafContainer 搬进去）——
+     视差只给 bgLayer/hitLayer 加 transform，叶子在里面才不会
+     「背景在飘、叶子钉在屏幕上」。坐标由 layout() 用 bx/by 换算成像素。
+   ★ 质感：低饱和 + 轻微景深模糊，opacity 减半——读作「前景氛围」而不是「贴纸」。
+   ========================================================= */
+.leaf-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.leaf-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;                    /* 背景图之上、麻雀与人物之下 */
+}
+/* 外壳：left/top/--size/rotate 全部由 layout() 写入（背景图坐标），动画不碰定位 */
+.leaf-sway {
+  position: absolute;
+  width: var(--size, 20px);
+  height: var(--size, 20px);
+  opacity: .55;
+  filter: blur(.5px) saturate(.72) brightness(.94)
+          drop-shadow(0 3px 5px rgba(60, 40, 20, .22));
+}
+/* 内层：微风摇曳（每片周期/延迟不同），只碰 transform */
+.leaf-art {
+  width: 100%; height: 100%;
+  overflow: visible;
+  animation: leafSway var(--t, 5.6s) ease-in-out infinite alternate;
+  animation-delay: var(--d, 0s);
+}
+/* 微风摇曳：幅度收敛（原来 ±14/18° 太像「招手」） */
+@keyframes leafSway {
+  0%   { transform: rotate(-9deg) scale(1); }
+  100% { transform: rotate(11deg) translate(2px, -2px) scale(1.05); }
+}
+
+/* =========================================================
+   点击空处泛起的光斑：一小圈暖光，散掉即消失。
+   语义是"你碰了一下这条街，它亮了一下"—— 不是"这里有人"，
+   所以刻意不做成呼吸灯，避免误导玩家去空处找人。
+   ★ 用 transform 做位移/缩放（不碰 left/top），才能走合成层不触发重排。
+   ★ pointer-events: none 是硬要求：少了它，光斑会在 0.78s 内吃掉所有点击，
+     尤其"点到人物旁边"时会把紧接着的第二次点击吞掉。
+   ========================================================= */
+.tap-glow {
+  position: fixed; left: 0; top: 0;
+  width: 96px; height: 96px;
+  margin: -48px 0 0 -48px;            /* 让"中心"对准点击点 */
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 400;                        /* 只活 0.78s，压过舞台即可 */
+  opacity: 0;
+  will-change: transform, opacity;
+  background: radial-gradient(circle,
+    rgba(255, 252, 238, 1) 0%,
+    rgba(255, 244, 208, .92) 18%,
+    rgba(255, 214, 146, .62) 38%,
+    rgba(255, 190, 100, .26) 58%,
+    rgba(255, 176, 86, 0) 78%);
+  /* ★ 这圈 box-shadow 不是装饰，是【可见度补丁】。
+     街道背景本身就是黄昏暖色调（夕阳 + 老砖 + 霓虹），暖光涟漪叠在暖背景上
+     几乎分不出来 —— 实测第一次截图里 96px 的光斑在街景上完全看不见。
+     加一圈偏白的内发光做"对比垫底"，无论落在亮天空还是暗砖墙上都有一圈边。 */
+  box-shadow: 0 0 22px 8px rgba(255, 250, 232, .38);
+}
+.tap-glow.go { animation: tapRipple .78s cubic-bezier(.2, .7, .3, 1) forwards; }
+@keyframes tapRipple {
+  0%   { opacity: 0;   transform: translate3d(var(--gx), var(--gy), 0) scale(.28); }
+  18%  { opacity: 1; }
+  100% { opacity: 0;   transform: translate3d(var(--gx), var(--gy), 0) scale(1.55); }
+}
+
+/* ---- 首屏专用的水波纹（.soft，由 app.js 在 loader 上加/摘）----
+   不再用"一团光晕"糊在暗底上——那只会像一坨模糊的斑点。
+   水波纹的做法：中心一粒很小的暖光核，两圈纤细的同心圆环
+   先后从中心荡开（第二圈晚 160ms），环越扩越淡，像石子落进水面。
+   全部是细线，没有大面积填充，所以干净、灵动、不脏画面。 */
+.tap-glow.soft {
+  width: 140px; height: 140px;
+  margin: -70px 0 0 -70px;
+  box-shadow: none;
+  /* 中心水珠落下时的一点微光：只占圆心很小一块，不会糊成一团 */
+  background: radial-gradient(circle,
+    rgba(255, 244, 216, .42) 0%,
+    rgba(255, 238, 200, .16) 6%,
+    rgba(255, 232, 190, 0) 13%);
+}
+/* 第一圈涟漪：最亮、最先荡开 */
+.tap-glow.soft::before {
+  content: '';
+  position: absolute;
+  inset: 18%;
+  border-radius: 50%;
+  border: 1.6px solid rgba(255, 233, 192, .62);
+  opacity: 0;
+  filter: blur(.4px);
+}
+/* 第二圈涟漪：更细、更淡、稍晚，叠出层层递进的水感 */
+.tap-glow.soft::after {
+  content: '';
+  position: absolute;
+  inset: 4%;
+  border-radius: 50%;
+  border: 1.1px solid rgba(255, 228, 180, .4);
+  opacity: 0;
+  filter: blur(.4px);
+}
+/* 光核淡出，同时把整体位移到位（transform 仍由 --gx/--gy 驱动） */
+.tap-glow.soft.go { animation: softCore 1.3s ease-out forwards; }
+@keyframes softCore {
+  0%   { opacity: 0;   transform: translate3d(var(--gx), var(--gy), 0); }
+  12%  { opacity: 1; }
+  55%  { opacity: .75; }
+  100% { opacity: 0;   transform: translate3d(var(--gx), var(--gy), 0); }
+}
+.tap-glow.soft.go::before { animation: softRippleA .92s cubic-bezier(.16, .6, .3, 1) forwards; }
+@keyframes softRippleA {
+  0%   { opacity: 0;  transform: scale(.16); }
+  16%  { opacity: .9; }
+  100% { opacity: 0;  transform: scale(1); }
+}
+.tap-glow.soft.go::after { animation: softRippleB 1.1s cubic-bezier(.16, .6, .3, 1) .16s forwards; }
+@keyframes softRippleB {
+  0%   { opacity: 0;   transform: scale(.24); }
+  22%  { opacity: .55; }
+  100% { opacity: 0;   transform: scale(1.06); }
+}
+
+/* 不做动效的机器上：只闪一下，不位移 */
+@media (prefers-reduced-motion: reduce) {
+  .tap-glow.go, .tap-glow.soft.go { animation: tapFade .5s ease forwards; }
+  .tap-glow.soft.go::before, .tap-glow.soft.go::after { animation: none; opacity: 0; }
+  @keyframes tapFade { 0% { opacity: .8 } 100% { opacity: 0 } }
+}
+
+/* =========================================================
+   复古三角形鼠标（2026-10 晚：放大镜已整体退役）
+   ---------------------------------------------------------
+   全站统一一枚复古三角：暖纸底 + 墨线描边 + 细铜勾边，热点在尖端 (3,2)。
+   ★ 用 * + !important 是刻意的：需求就是"所有位置都是同一枚三角"，
+     不再保留 pointer / grab 等语义差异；纯 CSS 实现，不依赖任何 JS。
+   ★ 只在"可悬停 + 精确指针"的设备生效；触屏没有光标概念，交还系统。
+   ========================================================= */
+@media (hover: hover) and (pointer: fine) {
+  * {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='28'%3E%3Cpath d='M3 2 L22 13.5 L8.8 17.6 Z' fill='none' stroke='%232a1c10' stroke-width='3.4' stroke-linejoin='round'/%3E%3Cpath d='M3 2 L22 13.5 L8.8 17.6 Z' fill='%23eadfc4' stroke='%238a6a3e' stroke-width='1.1' stroke-linejoin='round'/%3E%3Cpath d='M5.6 5.2 L11.2 11.8' stroke='rgba(59,40,22,.45)' stroke-width='1' stroke-linecap='round'/%3E%3C/svg%3E") 3 2, auto !important;
+  }
+}
+
+/* =========================================================
+   方案一「轻触唤醒」· 舞台提示条（2026-10 晚）
+   色值：文字 #FFF4E3 / 背景 #30251F@82% / 细线 #B99A6B
+   位置：贴底部副标题上方（避开六家店铺与人物脚下），只占一条；
+   顶部留给 HUD。z 序压过 hit-layer，但本身不吃点击（pointer-events:none）。
+   ========================================================= */
+.stage-hint {
+  position: absolute;
+  left: 50%; bottom: 58px;
+  transform: translate(-50%, 10px);
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 20px;
+  max-width: min(760px, calc(100% - 48px));
+  background: rgba(48, 37, 31, .82);
+  border: 1px solid #B99A6B;
+  border-radius: 4px;
+  color: #FFF4E3;
+  font-family: var(--kai);
+  font-size: 14px; letter-spacing: 2px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+  opacity: 0; pointer-events: none;
+  transition: opacity .6s ease, transform .6s ease;
+  z-index: 26;
+}
+.stage-hint.on   { opacity: 1; transform: translate(-50%, 0); }
+.stage-hint.gone { opacity: 0; transform: translate(-50%, 10px); }
+.stage-hint b    { font-weight: 400; color: #ffe9b8; }
+.stage-hint .hint-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto;
+  background: #B99A6B; box-shadow: 0 0 8px rgba(185, 154, 107, .9);
+}
+
+/* 开场期间同样藏起提示条（与 HUD/副标题同一闸门） */
+.app.booting .stage-hint { opacity: 0 !important; }
+
+/* 窄屏：提示条改成两行、贴底 */
+@media (max-width: 700px) {
+  .stage-hint { font-size: 12px; letter-spacing: 1px; bottom: 46px;
+                white-space: normal; text-align: center; }
+}
+
+/* =========================================================
+   门面热区（2026-10 晚）
+   提示条写的是「点击任意一家店铺」，那店招与店面必须真的能点。
+   人物盒子只罩立绘（未点亮时几乎不可见），店招又在头顶很高的位置，
+   中间一大片背景点了没反应 —— 这里给每家店补一块透明可点区域。
+   ★ z-index 低于人物盒子：门面与人物重叠时归人物，不抢人物本体的点击。
+   ★ 完全透明且无描边：只是命中区，不能让人看出"哪里能点"，
+     可见的引导线索仍然只有脚下那圈呼吸灯。
+   ========================================================= */
+.shop-zone {
+  position: absolute;
+  transform: none;                 /* 不做 translate(-50%)：坐标已是绝对值 */
+  pointer-events: auto;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.hit-layer .shop-zone { z-index: 1; }
+.hit-layer .hotspot   { z-index: 4; }
+
+/* =========================================================
+   （2026-10 晚）DOM 光标 / 放大镜已整体退役：
+   光标只剩 CSS 里那枚全局复古三角（见「复古三角形鼠标」块），
+   纯 cursor:url 实现，没有 JS、没有 DOM 节点，天然无双光标问题。
+   ========================================================= */
+
+/* =========================================================
+   呼吸灯 · 独立热区（2026-10 晚）
+   ---------------------------------------------------------
+   原来 .ping 锁在人物盒子里（left:50% / bottom:.5%），
+   灯的位置被立绘死死绑住 —— 想让它落在店前台阶、花坛边、路灯下都不行。
+   现在它是 hit-layer 的直接子节点 .ping-zone，
+   坐标由 js/data.js 的 role.ping = [x, y]（背景图百分比）决定，
+   与人物/门面同一套坐标系、同一套视差变换。
+   尺寸由 JS 按背景图高等比写入（PING_SIZE），CSS 这里只管长相与动画。
+   ========================================================= */
+.ping-zone {
+  position: absolute;
+  transform: translate(-50%, -50%);   /* [x,y] 就是灯心坐标，拖出来即是所见 */
+  pointer-events: auto;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  z-index: 3;                         /* 人物(4)之下、门面(1)之上 */
+}
+/* 点中时把涟漪圈提亮一档，给一点"被瞄准"的反馈（不改变命中区大小） */
+.ping-zone:hover .ping::after { border-color: rgba(255, 246, 218, .96); }
+.ping-zone:hover .ping::before { opacity: 1; }
+.ping-zone:active .ping::before { transform: scale(.86); }
+
+/* ---------------------------------------------------------
+   灯圈本体
+   ★★ 分层铁律：.ping 容器自己【绝不能】带 opacity / filter 动画。
+      伪元素 ::before / ::after 是它的子层，父级 opacity 会与子层【相乘】——
+      原来把"涟漪淡出"（opacity .55→.16→0）写在 .ping 上，
+      涟漪淡到 .16 的那一瞬，里面那点常亮暖核也被压成 0.95×0.16 ≈ 0.15，
+      整盏灯等于消失。实测截图里六个点在黄昏石板路上几乎看不见，
+      根因就是这个"乘法"（不是配色太淡）。
+      现在：容器透明静止，涟漪与暖晕各自独立动画，互不压制。
+   --------------------------------------------------------- */
+.ping-zone .ping {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 100%; height: 100%;
+  margin: -50% 0 0 -50%;
+  border-radius: 50%;
+  pointer-events: none;
+}
+/* 常亮暖晕：任何时刻都在，保证"微微发光的地方"看得见、找得到。
+   2026-10 晚再调亮一档：暖晕是灯的"实体"，直接顶到 1，
+   渐变内圈也加浓（中心近乎纯暖白、中圈过半不透明），
+   外圈辉光从 14px 提到 22px —— 黄昏亮石板路上也要一眼能看见。 */
+.ping-zone .ping::before {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 78%; height: 78%;
+  margin: -39% 0 0 -39%;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    rgba(255, 252, 236, 1) 0%,
+    rgba(255, 228, 168, .72) 38%,
+    rgba(255, 198, 118, .34) 64%,
+    rgba(255, 186, 100, .08) 84%);
+  box-shadow: 0 0 22px rgba(255, 208, 132, .85), 0 0 44px rgba(255, 196, 118, .4);
+  animation: pingHalo 2.6s ease-in-out infinite;
+}
+@keyframes pingHalo {
+  0%, 100% { opacity: .8; transform: scale(.95); }
+  50%      { opacity: 1;  transform: scale(1.08); }
+}
+/* 向外扩散的涟漪：从中心推出、淡出，做出"呼吸"的节奏感。
+   opacity 只作用在它自己身上，不再连累暖晕。 */
+.ping-zone .ping::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 244, 214, .9);
+  box-shadow: 0 0 8px rgba(255, 214, 148, .5);
+  animation: pingRing 2.6s ease-out infinite;
+}
+/* 点亮后灯灭（与人物 lit 状态联动） */
+.ping-zone.gone { display: none; }
+
+/* =========================================================
+   背景音乐开关（符号钮 · 2026-10 改版）
+   ---------------------------------------------------------
+   现在它和「重走」一样是一枚 .hud-icon-btn：半透明磨砂圆钮 + 内联音符 SVG，
+   画面里没有任何文字。播放态用「音符染亮成暖金 + 一圈缓慢外扩的光环」表示，
+   暂停态整体压暗一档 —— 不写字、也不用 emoji。
+   （原来「纸签 + 三根声波」的实现已整体删除。）
+   ========================================================= */
+.music-btn .music-icon {
+  position: relative;
+  width: 20px; height: 20px;
+  display: block;
+  color: inherit;                 /* 颜色继承圆钮：悬停 / 播放态统一由父级决定 */
+}
+.music-btn .music-icon svg { width: 100%; height: 100%; display: block; }
+
+/* 播放态：音符亮成暖金并微微发光 */
+.music-btn.playing { color: #f3cb73; border-color: rgba(214, 172, 96, .8); }
+.music-btn.playing .music-icon svg { filter: drop-shadow(0 0 4px rgba(226, 178, 96, .7)); }
+
+/* 播放态的外扩光环：一圈暖金细环不断向外扩散 ——「正在出声」的唯一线索 */
+.music-btn.playing::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1.4px solid rgba(242, 200, 106, .6);
+  pointer-events: none;
+  animation: musicRing 1.9s ease-out infinite;
+}
+@keyframes musicRing {
+  0%   { opacity: .7; transform: scale(.82); }
+  100% { opacity: 0;  transform: scale(1.3); }
+}
+
+/* 暂停态压暗一档，提示"现在没声音" */
+.music-btn:not(.playing) { opacity: .82; }
+.music-btn:not(.playing):hover { opacity: 1; }
+
+/* =========================================================
+   首页巡街的小黑猫（#loaderCat / js/loader-cat.js）· 黄昏绘本版
+   ---------------------------------------------------------
+   精细 SVG 角色：步幅小而克制（±11°）、起伏仅 1px、尾巴缓摆，
+   走位与随机小节目由 JS 编排；位移写外层 translate3d，
+   CSS 只管"身体怎么动"，两套系统不抢属性，绝不瞬移或抖动。
+   ★ pointer-events:none：不吃点击、不挡按钮；
+     外层 .loader overflow:hidden，绝不会撑出横向滚动条。
+   ★ 进入老街（.loader.entering）时整只猫淡出隐藏。
+   ========================================================= */
+.loader-cat {
+  position: absolute;
+  left: 0;
+  bottom: 30px;                    /* 距底部 30px，不压正文与按钮 */
+  z-index: 4;
+  height: 78px;
+  width: auto;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate3d(-160px, 0, 0);
+  transition: opacity .6s ease;
+  will-change: transform, opacity;
+}
+.loader-cat.show { opacity: 1; }
+.loader.entering .loader-cat { opacity: 0; transition: opacity .35s ease; }
+.cat-rig { width: 100%; height: 100%; display: block; overflow: visible; }
+
+/* ---- 行走循环 ---- */
+.loader-cat .cat-main {
+  transform-box: view-box;
+  transform-origin: 95px 78px;
+  animation: cat-bounce .36s ease-in-out infinite alternate;
+}
+.loader-cat .leg { transform-box: view-box; }
+.loader-cat .leg-back-a { transform-origin: 58px 86px; animation: cat-step-a .36s ease-in-out infinite alternate; }
+.loader-cat .leg-front-b { transform-origin: 138px 86px; animation: cat-step-a .36s ease-in-out infinite alternate; }
+.loader-cat .leg-back-b { transform-origin: 70px 88px; animation: cat-step-b .36s ease-in-out infinite alternate; }
+.loader-cat .leg-front-a { transform-origin: 126px 84px; animation: cat-step-b .36s ease-in-out infinite alternate; }
+@keyframes cat-step-a { from { transform: rotate(-11deg); } to { transform: rotate(11deg); } }
+@keyframes cat-step-b { from { transform: rotate(11deg); }  to { transform: rotate(-11deg); } }
+@keyframes cat-bounce { from { transform: translateY(0); } to { transform: translateY(-1px); } }
+
+.loader-cat .cat-tail {
+  transform-box: view-box;
+  transform-origin: 46px 84px;
+  animation: cat-tail-sway 1.8s ease-in-out infinite alternate;
+}
+@keyframes cat-tail-sway { from { transform: rotate(-6deg); } to { transform: rotate(7deg); } }
+
+.loader-cat .cat-ear { transform-box: view-box; }
+.loader-cat .cat-ear-left  { transform-origin: 149px 40px; animation: cat-ear-twitch 5.5s ease-in-out infinite; }
+.loader-cat .cat-ear-right { transform-origin: 168px 38px; animation: cat-ear-twitch 5.5s ease-in-out 1.8s infinite; }
+@keyframes cat-ear-twitch {
+  0%, 91%, 100% { transform: rotate(0deg); }
+  94% { transform: rotate(-7deg); }
+  97% { transform: rotate(3deg); }
+}
+
+.loader-cat .cat-lid {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scaleY(0);
+  animation: cat-blink 6.5s ease-in-out infinite;
+}
+@keyframes cat-blink {
+  0%, 93%, 100% { transform: scaleY(0); }
+  95% { transform: scaleY(1); }
+  97% { transform: scaleY(0); }
+}
+
+.loader-cat .cat-head { transform-box: view-box; transform-origin: 142px 62px; }
+.loader-cat .cat-tongue { opacity: 0; }
+
+.loader-cat .cat-shadow {
+  transform-box: view-box;
+  transform-origin: 97px 108px;
+  animation: cat-shadow-breath .72s ease-in-out infinite alternate;
+}
+@keyframes cat-shadow-breath { from { transform: scaleX(1); } to { transform: scaleX(.965); } }
+
+/* ---- 小节目：坐下 ---- */
+.cat-sit .leg { animation: none; }
+.cat-sit .leg-back-a { transform: rotate(-52deg); }
+.cat-sit .leg-back-b { transform: rotate(-46deg); }
+.cat-sit .leg-front-a { transform: rotate(40deg); }
+.cat-sit .leg-front-b { transform: rotate(46deg); }
+.cat-sit .cat-main { animation: none; transform: translateY(4px); }
+.cat-sit .cat-head { animation: none; transform: rotate(-4deg); }
+.cat-sit .cat-tail { animation: none; transform: rotate(-17deg); }
+.cat-sit .cat-shadow { animation: none; transform: scaleX(1.06); }
+
+/* ---- 小节目：舔爪 ---- */
+.cat-lick .leg { animation: none; }
+.cat-lick .leg-front-a { transform: rotate(24deg); }
+.cat-lick .leg-front-b { transform: rotate(30deg); }
+.cat-lick .cat-main { animation: none; }
+.cat-lick .cat-head { animation: cat-lick-head 1.1s ease-in-out infinite; }
+@keyframes cat-lick-head {
+  0%, 100% { transform: rotate(15deg) translateY(3px); }
+  50%      { transform: rotate(8deg)  translateY(1.5px); }
+}
+.cat-lick .cat-tongue { opacity: 1; animation: cat-tongue 1.1s ease-in-out infinite; }
+.cat-lick .cat-tail { animation: cat-tail-sit 2.6s ease-in-out infinite alternate; }
+@keyframes cat-tail-sit { from { transform: rotate(-9deg); } to { transform: rotate(3deg); } }
+@keyframes cat-tongue {
+  0%, 100% { opacity: 0;  transform: translateY(0); }
+  45%, 70% { opacity: .9; transform: translateY(2.5px); }
+}
+
+/* ---- 小节目：歪头张望 ---- */
+.cat-look .leg { animation: none; }
+.cat-look .leg-back-a { transform: rotate(-5deg); }
+.cat-look .leg-back-b { transform: rotate(4deg); }
+.cat-look .leg-front-a { transform: rotate(4deg); }
+.cat-look .leg-front-b { transform: rotate(-4deg); }
+.cat-look .cat-main { animation: none; }
+.cat-look .cat-head { animation: cat-look-around 2.4s ease-in-out infinite; }
+@keyframes cat-look-around {
+  0%, 100% { transform: rotate(-11deg); }
+  55%      { transform: rotate(6deg); }
+}
+.cat-look .cat-tail { animation: cat-tail-sway 1.5s ease-in-out infinite alternate; }
+
+/* ---- 小节目：小跳步 ---- */
+.cat-hop .leg { animation: cat-hop-legs .62s ease-in-out both; }
+.cat-hop .cat-main { animation: cat-hop-up .62s cubic-bezier(.3, .7, .4, 1) both; }
+.cat-hop .cat-head { animation: cat-hop-head .62s ease-in-out both; }
+.cat-hop .cat-tail { animation: cat-hop-tail .62s ease-out both; }
+.cat-hop .cat-shadow { animation: cat-hop-shadow .62s ease-in-out both; }
+@keyframes cat-hop-legs {
+  0%   { transform: rotate(12deg); }
+  40%  { transform: rotate(-5deg); }
+  70%  { transform: rotate(6deg); }
+  100% { transform: rotate(10deg); }
+}
+@keyframes cat-hop-up {
+  0%   { transform: translateY(0); }
+  45%  { transform: translateY(-11px); }
+  100% { transform: translateY(0); }
+}
+@keyframes cat-hop-head {
+  0%   { transform: rotate(2deg); }
+  40%  { transform: rotate(-5deg); }
+  100% { transform: rotate(1deg); }
+}
+@keyframes cat-hop-tail {
+  0%   { transform: rotate(-9deg); }
+  45%  { transform: rotate(14deg); }
+  100% { transform: rotate(-3deg); }
+}
+@keyframes cat-hop-shadow {
+  0%, 100% { transform: scaleX(1);   opacity: .22; }
+  45%      { transform: scaleX(.72); opacity: .12; }
+}
+
+/* 窄屏：猫缩小、贴近地面 */
+@media (max-width: 760px) {
+  .loader-cat { height: 59px; bottom: 20px; }
+}
+/* 不做动效的机器上：动作帧全部关掉 */
+@media (prefers-reduced-motion: reduce) {
+  .loader-cat .cat-main, .loader-cat .leg, .loader-cat .cat-tail,
+  .loader-cat .cat-ear, .loader-cat .cat-lid, .loader-cat .cat-shadow { animation: none !important; }
+}
