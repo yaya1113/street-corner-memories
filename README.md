@@ -7,6 +7,12 @@
 
 ---
 
+## 在线访问
+
+**https://zhangshengya.github.io/street-corner-memories/**
+
+已通过 GitHub Pages 静态托管，浏览器直接打开即可体验，无需本地环境。
+
 ## 运行方式
 
 纯静态项目，无构建、无依赖。任选一种：
